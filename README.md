@@ -26,10 +26,9 @@ all 11 sectors, plus SPY, QQQ, TLT, and GLD. Planned comparisons include SMA
 crossover, momentum, mean reversion, mean-variance optimisation, equal weight,
 and buy-and-hold.
 
-Planned evaluation includes CAGR, Sharpe ratio, maximum drawdown, volatility,
-VaR, and beta versus SPY. Those results are not implemented yet. A free
-historical-data source can revise or omit observations; locally cached data is
-not automatically point-in-time or survivorship-bias-free.
+Evaluation includes CAGR, Sharpe ratio, maximum drawdown, volatility, VaR, and
+beta versus SPY. A free historical-data source can revise or omit observations;
+locally cached data is not automatically point-in-time or survivorship-bias-free.
 
 ## Build roadmap
 
@@ -40,10 +39,10 @@ not automatically point-in-time or survivorship-bias-free.
 4. Tested performance and risk metrics (**complete**)
 5. Streamlit strategy playground and learning mode (**complete**)
 6. Additional strategies and out-of-sample testing (**complete**)
-7. Bias lab, predict-then-run, and quiz
-8. Paper-trading simulator and trade journal
-9. Audit logging, input validation, and threat model
-10. Results, limitations, and project write-up
+7. Bias lab, predict-then-run, and quiz (**complete**)
+8. Paper-trading simulator and trade journal (**complete**)
+9. Audit logging, input validation, and threat model (**complete**)
+10. Results, limitations, and project write-up (**methods complete; empirical run pending**)
 
 Each stage is intended to add a small learning notebook before the corresponding
 production module. Features are described as planned until implemented and
@@ -160,7 +159,7 @@ any leading sessions excluded before the selected assets overlap.
 
 Interactive controls make runs easier to inspect, but do not prove a strategy
 is robust. The held-out period is deliberately short enough to make sample-size
-limitations visible; the planned bias lab is not implemented yet.
+limitations visible.
 
 ## Stage 6: momentum, mean reversion, and Markowitz
 
@@ -186,9 +185,54 @@ signal thresholds have not been tuned, and changing them after seeing holdout
 results would consume that holdout. The multi-strategy learning experiment is
 in `notebooks/06_walk_forward_strategies.ipynb`.
 
+## Stage 7: bias lab, predictions, and quizzes
+
+Before running the backtest, record whether you expect the selected strategy to
+beat its benchmark and your estimated maximum drawdown. The dashboard compares
+those predictions with the held-out result; changing a research input requires
+a new prediction.
+
+The bias lab can deliberately remove costs, use tomorrow's signal or portfolio
+weights today, or select SMA parameters using the full sample. These variants
+are explicitly labelled invalid and are never reported as honest out-of-sample
+results. The overfit demo reports the best full-sample setting on the same
+observations used to choose it. The quiz tests concepts covered in the code.
+See `notebooks/07_bias_lab.ipynb`.
+
+## Stage 8: paper trading and trade journal
+
+The optional simulator stores a local virtual account in
+`data/paper_trading.sqlite3` (ignored by Git). It sends no orders and does not
+connect to a brokerage. You manually enter a reference price; each simulated
+trade requires a written rationale first and deducts the dashboard's current
+transaction-cost and slippage assumptions. Cash limits, share availability,
+ticker syntax, and numeric inputs are checked. Add a later review to each
+trade. The initial account balance is configured in
+`config/project.yaml`. See `notebooks/08_paper_trading_journal.ipynb`.
+
+## Stage 9: validation, audit log, and threat model
+
+Each evaluated daily signal is recorded with its run ID, date, target signal,
+and available position. Paper-trade attempts and post-trade reviews are also
+logged. The local `data/audit.jsonl` uses a SHA-256 hash chain; each append
+checks the existing chain before writing. The log avoids copying free-text
+trade rationales and reviews, retaining only their hashes.
+
+The audit is tamper-evident, not tamper-proof: anyone able to rewrite the local
+file can recalculate hashes or delete it. The log is not encrypted, signed,
+remotely backed up, or a regulated record. Protect the device and keep the
+SQLite journal and generated log out of Git. Read
+[`docs/threat-model.md`](docs/threat-model.md) before extending data sources,
+sharing the dashboard, or adding credentials or any brokerage connection.
+The audit-log lesson is in `notebooks/09_audit_log.ipynb`.
+
 ## Status and intended use
 
-Stages 1–6 are complete. Data downloads happen only when the caller invokes the
-pipeline or opens the dashboard; the repository does not place trades.
-Everything built here is for education and paper research, not financial
-advice or a claim of live or professional performance.
+Stages 1–10 are complete as a research platform and methods write-up. **No
+empirical strategy results have been verified yet**, so the report does not
+claim measured performance. Data downloads happen only when the caller invokes
+the pipeline or opens the dashboard; the repository does not place real trades.
+Everything built here is for education and paper research, not financial advice
+or a claim of live or professional performance. Read
+[`docs/research-writeup.md`](docs/research-writeup.md) for the research question,
+method, reporting template, and next steps.

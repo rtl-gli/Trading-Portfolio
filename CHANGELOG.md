@@ -13,6 +13,10 @@ Notable project changes are recorded here.
 - Added a Streamlit SMA playground with learning mode, data diagnostics, and glossary.
 - Added momentum, mean-reversion, capped long-only Markowitz, and chronological holdout evaluation.
 - Applied execution delays and transaction costs consistently across strategies and added walk-forward tests.
+- Added prediction-before-run, deliberately biased comparison variants, and a project-specific learning quiz.
+- Added a validated local paper ledger with transaction costs, rationale-first entries, and post-trade reviews.
+- Added a hash-chained local audit log, signal/trade event recording, input validation, and threat model.
+- Added a research write-up that documents the methodology, limitations, and a reproducible results-reporting template without inventing empirical findings.
 
 ## [0.1.0] - Initial foundation
 

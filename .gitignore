@@ -26,6 +26,9 @@ env/
 data/raw/
 data/cache/
 data/processed/
+data/*.sqlite3
+data/*.db
+data/*.jsonl
 outputs/
 logs/
 

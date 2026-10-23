@@ -54,6 +54,13 @@ class DashboardSettings:
 
 
 @dataclass(frozen=True)
+class PaperTradingSettings:
+    """Local simulator settings, separate from real brokerage accounts."""
+
+    initial_cash_usd: float
+
+
+@dataclass(frozen=True)
 class StrategySettings:
     """Configured entry, exit, and rolling portfolio estimation assumptions."""
 
@@ -262,6 +269,31 @@ def load_dashboard_settings(
         default_start_date=parsed_start,
         default_end_date=parsed_end,
     )
+
+
+def load_paper_trading_settings(
+    path: Path = DEFAULT_PROJECT_CONFIG_PATH,
+) -> PaperTradingSettings:
+    """Load the configured starting balance for the local paper simulator."""
+    try:
+        with path.open(encoding="utf-8") as config_file:
+            raw_config = yaml.safe_load(config_file)
+    except yaml.YAMLError as error:
+        raise ValueError(f"Invalid project YAML configuration: {path}") from error
+    paper_trading = (
+        raw_config.get("paper_trading") if isinstance(raw_config, dict) else None
+    )
+    if not isinstance(paper_trading, dict):
+        raise TypeError(f"Project config must contain paper_trading: {path}")
+    initial_cash = paper_trading.get("initial_cash_usd")
+    if (
+        isinstance(initial_cash, bool)
+        or not isinstance(initial_cash, (int, float))
+        or not math.isfinite(initial_cash)
+        or initial_cash <= 0
+    ):
+        raise ValueError("paper_trading.initial_cash_usd must be positive and finite.")
+    return PaperTradingSettings(initial_cash_usd=float(initial_cash))
 
 
 def load_strategy_settings(

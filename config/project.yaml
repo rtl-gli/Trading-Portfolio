@@ -19,3 +19,6 @@ dashboard:
   default_asset: SPY
   default_start_date: 2005-01-03
   default_end_date: 2026-01-01
+
+paper_trading:
+  initial_cash_usd: 10000

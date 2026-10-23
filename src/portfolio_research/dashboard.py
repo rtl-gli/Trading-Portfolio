@@ -2,22 +2,38 @@
 
 from __future__ import annotations
 
+import sqlite3
+
+import pandas as pd
 import streamlit as st
 
+from portfolio_research.audit import audit_signal_run
 from portfolio_research.backtest import (
     run_buy_and_hold_backtest,
     run_portfolio_backtest,
     run_signal_backtest,
 )
+from portfolio_research.bias_lab import (
+    compare_portfolio_biases,
+    compare_signal_biases,
+    select_sma_on_full_sample,
+)
 from portfolio_research.config import (
     SmaSettings,
     load_dashboard_settings,
+    load_paper_trading_settings,
     load_sma_settings,
     load_strategy_settings,
     load_universe,
 )
 from portfolio_research.market_data import MarketDataError, load_prices
 from portfolio_research.metrics import calculate_metrics
+from portfolio_research.paper_trading import (
+    add_trade_review,
+    load_paper_portfolio,
+    record_paper_trade,
+)
+from portfolio_research.quiz import select_question
 from portfolio_research.strategies import (
     mean_reversion_signals,
     momentum_signals,
@@ -67,6 +83,7 @@ def _display_metric(label: str, value: float | None, help_text: str) -> None:
 def main() -> None:
     st.set_page_config(page_title="Portfolio Research Lab", layout="wide")
     dashboard_settings = load_dashboard_settings()
+    paper_settings = load_paper_trading_settings()
     sma_defaults = load_sma_settings()
     strategy_defaults = load_strategy_settings()
     universe = load_universe()
@@ -196,6 +213,24 @@ def main() -> None:
             value=True,
             help="Show plain-English metric and chart explanations plus caveats.",
         )
+        st.subheader("Bias lab")
+        show_cost_bias = st.checkbox("Show results with costs ignored")
+        show_lookahead_bias = st.checkbox("Show look-ahead biased results")
+        show_overfit_bias = st.checkbox("Search SMA settings on the full sample")
+        st.subheader("Predict then run")
+        predicted_to_beat = st.radio(
+            "Will the strategy beat its benchmark?",
+            options=("Yes", "No"),
+            horizontal=True,
+        )
+        predicted_drawdown = st.slider(
+            "Guess maximum drawdown (loss %)",
+            min_value=0.0,
+            max_value=80.0,
+            value=20.0,
+            step=1.0,
+        )
+        lock_prediction = st.button("Lock prediction and run", type="primary")
 
     if (
         not isinstance(date_range, tuple)
@@ -214,6 +249,35 @@ def main() -> None:
         return
     if strategy_name == "Walk-forward Markowitz" and len(selected_assets) < 2:
         st.error("Select at least two ETFs for Markowitz optimisation.")
+        return
+
+    run_signature = (
+        strategy_name,
+        tuple(selected_assets),
+        asset,
+        start_date,
+        end_date,
+        int(fast_window),
+        int(slow_window),
+        float(transaction_cost),
+        float(slippage),
+        float(train_fraction),
+        int(momentum_lookback),
+        int(reversion_lookback),
+        float(entry_z_score),
+    )
+    if lock_prediction:
+        st.session_state["locked_prediction"] = (
+            run_signature,
+            predicted_to_beat,
+            float(predicted_drawdown),
+        )
+    locked_prediction = st.session_state.get("locked_prediction")
+    if not locked_prediction or locked_prediction[0] != run_signature:
+        st.info(
+            "Make and lock your prediction before the backtest runs. Changing "
+            "research inputs requires a new prediction."
+        )
         return
 
     symbols = (
@@ -268,6 +332,13 @@ def main() -> None:
             benchmark_returns = benchmark_result.net_returns
             benchmark_label = "SPY buy-and-hold"
             strategy_label = "Rolling Markowitz, net of costs"
+            audit_run_id = audit_signal_run(
+                strategy_name,
+                selected_assets,
+                weights.loc[:, selected_assets],
+                strategy_positions,
+                settings,
+            )
         else:
             if strategy_name == "SMA crossover":
                 signals = sma_signals(
@@ -302,6 +373,13 @@ def main() -> None:
             benchmark_returns = benchmark_result.net_returns
             benchmark_label = f"{asset} buy-and-hold, net of costs"
             strategy_label = f"{strategy_name}, net of costs"
+            audit_run_id = audit_signal_run(
+                strategy_name,
+                [asset],
+                signals,
+                strategy_positions,
+                settings,
+            )
         spy_returns = holdout_prices["SPY"].pct_change(fill_method=None)
         spy_returns.iloc[0] = 0.0
         strategy_metrics = calculate_metrics(strategy_returns, spy_returns)
@@ -319,6 +397,7 @@ def main() -> None:
         f"Data source: {data.source} · Retrieved: {data.retrieved_at.isoformat()} · "
         f"Observed dates: {data.quality.first_date} to {data.quality.last_date}"
     )
+    st.caption(f"Signal audit run ID: `{audit_run_id}` (local hash-chained log)")
     st.caption(f"Missing data by requested asset: {data.quality.missing_by_symbol}")
     if excluded_initial_bars:
         st.info(
@@ -365,6 +444,34 @@ def main() -> None:
                 st.caption(f"**What it means:** {explanation}")
                 st.caption(f"**Why it can mislead:** {caveat}")
 
+    realized_outperformance = strategy_metrics.cagr > benchmark_metrics.cagr
+    realized_drawdown = (
+        abs(strategy_metrics.max_drawdown) * 100
+        if strategy_metrics.max_drawdown is not None
+        else None
+    )
+    _, predicted_beat, predicted_drawdown_value = locked_prediction
+    st.subheader("Your prediction")
+    prediction_columns = st.columns(2)
+    with prediction_columns[0]:
+        st.metric(
+            "Benchmark prediction",
+            predicted_beat,
+            "Correct"
+            if (predicted_beat == "Yes") == realized_outperformance
+            else "Incorrect",
+        )
+    with prediction_columns[1]:
+        if realized_drawdown is None:
+            st.metric("Drawdown prediction", f"{predicted_drawdown_value:.0f}%")
+            st.caption("Actual drawdown is unavailable.")
+        else:
+            st.metric(
+                "Drawdown prediction",
+                f"{predicted_drawdown_value:.0f}%",
+                f"{realized_drawdown - predicted_drawdown_value:+.1f} percentage points actual minus guess",
+            )
+
     wealth = (1 + strategy_returns).cumprod().rename(strategy_label).to_frame()
     wealth[benchmark_label] = (1 + benchmark_returns).cumprod()
     st.subheader("Growth of a notional $1")
@@ -389,6 +496,214 @@ def main() -> None:
     warnings = (*strategy_metrics.warnings, *benchmark_metrics.warnings)
     if warnings:
         st.warning("Metric limitations: " + " ".join(dict.fromkeys(warnings)))
+
+    with st.expander("Bias lab results"):
+        st.warning(
+            "These toggles deliberately break research safeguards. Biased numbers "
+            "are teaching examples, not valid performance estimates."
+        )
+        if show_cost_bias or show_lookahead_bias:
+            if strategy_name == "Walk-forward Markowitz":
+                portfolio_bias = compare_portfolio_biases(
+                    holdout_prices.loc[:, selected_assets],
+                    weights.loc[holdout_prices.index],
+                    settings,
+                )
+                cost_returns = portfolio_bias.costs_ignored.net_returns
+                lookahead_returns = (
+                    portfolio_bias.future_weights_used.net_returns
+                    if portfolio_bias.future_weights_used is not None
+                    else None
+                )
+            else:
+                bias_comparison = compare_signal_biases(
+                    holdout_prices[asset],
+                    signals.loc[holdout_prices.index],
+                    settings,
+                )
+                cost_returns = bias_comparison.costs_ignored.net_returns
+                lookahead_returns = bias_comparison.future_signal_used.net_returns
+            bias_rows = {"Honest OOS baseline": strategy_metrics.cagr}
+            if show_cost_bias:
+                bias_rows["Costs ignored"] = calculate_metrics(
+                    cost_returns,
+                    spy_returns,
+                ).cagr
+            if show_lookahead_bias:
+                if lookahead_returns is None:
+                    st.warning(
+                        "Look-ahead portfolio example unavailable: no future "
+                        "rebalance target exists in this holdout."
+                    )
+                else:
+                    bias_rows["Tomorrow's signal used today"] = calculate_metrics(
+                        lookahead_returns,
+                        spy_returns,
+                    ).cagr
+            st.dataframe(
+                pd.DataFrame.from_dict(bias_rows, orient="index", columns=["CAGR"]),
+                use_container_width=True,
+            )
+            st.caption(
+                "The look-ahead variant feeds tomorrow's already-known signal or "
+                "portfolio weights into today's position. It is intentionally invalid."
+            )
+        if show_overfit_bias:
+            if strategy_name == "Walk-forward Markowitz":
+                overfit_prices = aligned_prices["SPY"]
+            else:
+                overfit_prices = aligned_prices[asset]
+            try:
+                overfit = select_sma_on_full_sample(overfit_prices, settings)
+            except ValueError as error:
+                st.warning(f"Overfit demonstration unavailable: {error}")
+            else:
+                st.write(
+                    f"Best full-sample SMA: {overfit.selected_fast_window}/"
+                    f"{overfit.selected_slow_window}; tested "
+                    f"{overfit.combinations_tested} parameter pairs."
+                )
+                st.dataframe(
+                    pd.DataFrame(
+                        {
+                            "Full-sample baseline": [overfit.baseline_growth],
+                            "Selected full-sample strategy": [overfit.selected_growth],
+                        },
+                        index=["Terminal wealth per $1 before visualization"],
+                    ),
+                    use_container_width=True,
+                )
+                st.warning(overfit.warning)
+
+    with st.expander("Quiz-me"):
+        if "quiz_question" not in st.session_state:
+            st.session_state["quiz_question"] = select_question()
+            st.session_state["quiz_number"] = 0
+        question = st.session_state["quiz_question"]
+        st.write(question.prompt)
+        answer_key = f"quiz_answer_{st.session_state['quiz_number']}"
+        answer = st.radio(
+            "Choose an answer",
+            options=question.options,
+            key=answer_key,
+        )
+        if st.button("Check answer", key="check_quiz_answer"):
+            if answer == question.options[question.answer_index]:
+                st.success("Correct. " + question.explanation)
+            else:
+                st.error(
+                    f"Not quite. The answer is: "
+                    f"{question.options[question.answer_index]}. "
+                    f"{question.explanation}"
+                )
+        if st.button("Next question", key="next_quiz_question"):
+            st.session_state["quiz_question"] = select_question()
+            st.session_state["quiz_number"] += 1
+
+    with st.expander("Paper-trading simulator and journal"):
+        st.warning(
+            "Local educational simulation only. This app sends no orders to a "
+            "broker. Enter a reference price yourself; costs and slippage are "
+            "deducted using the current sidebar assumptions."
+        )
+        try:
+            paper_portfolio = load_paper_portfolio(
+                initial_cash=paper_settings.initial_cash_usd
+            )
+        except (OSError, sqlite3.Error, ValueError) as error:
+            st.error(f"Paper account could not be loaded: {error}")
+            return
+        portfolio_columns = st.columns(3)
+        portfolio_columns[0].metric("Paper cash", f"${paper_portfolio.cash:,.2f}")
+        portfolio_columns[1].metric(
+            "Initial cash", f"${paper_portfolio.initial_cash:,.2f}"
+        )
+        portfolio_columns[2].metric(
+            "Cumulative modeled costs",
+            f"${paper_portfolio.cumulative_costs:,.2f}",
+        )
+        st.write(
+            "Current holdings:",
+            dict(paper_portfolio.holdings) or "No open holdings",
+        )
+        with st.form("paper_trade_form"):
+            trade_symbol = st.selectbox("Ticker", options=universe.symbols)
+            trade_side = st.selectbox("Simulated action", options=("buy", "sell"))
+            trade_quantity = st.number_input(
+                "Quantity (shares)",
+                min_value=0.000001,
+                value=1.0,
+                step=1.0,
+            )
+            trade_price = st.number_input(
+                "Reference price (USD per share)",
+                min_value=0.000001,
+                value=100.0,
+                step=1.0,
+            )
+            trade_rationale = st.text_area(
+                "Reasoning before the simulated trade",
+                max_chars=5_000,
+                help="Record the hypothesis, evidence and risks before submitting.",
+            )
+            submit_trade = st.form_submit_button("Record simulated trade")
+        if submit_trade:
+            try:
+                trade = record_paper_trade(
+                    symbol=trade_symbol,
+                    side=trade_side,
+                    quantity=trade_quantity,
+                    reference_price=trade_price,
+                    rationale=trade_rationale,
+                    transaction_cost_bps_per_side=settings.transaction_cost_bps_per_side,
+                    slippage_bps_per_side=settings.slippage_bps_per_side,
+                    initial_cash=paper_settings.initial_cash_usd,
+                )
+            except (OSError, sqlite3.Error, TypeError, ValueError) as error:
+                st.error(f"Paper trade was not recorded: {error}")
+            else:
+                st.success(f"Recorded paper trade #{trade.trade_id}.")
+                st.rerun()
+
+        if paper_portfolio.trades:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "ID": trade.trade_id,
+                            "Time (UTC)": trade.created_at,
+                            "Ticker": trade.symbol,
+                            "Side": trade.side,
+                            "Quantity": trade.quantity,
+                            "Reference price": trade.reference_price,
+                            "Rationale": trade.rationale,
+                            "Review": trade.review or "",
+                        }
+                        for trade in reversed(paper_portfolio.trades)
+                    ]
+                ),
+                use_container_width=True,
+            )
+            trade_to_review = st.selectbox(
+                "Trade to review",
+                options=tuple(trade.trade_id for trade in paper_portfolio.trades),
+                format_func=lambda trade_id: f"Trade #{trade_id}",
+            )
+            with st.form("paper_trade_review_form"):
+                review_text = st.text_area(
+                    "Post-trade review",
+                    max_chars=5_000,
+                    help="What happened, what did you learn, and what would you change?",
+                )
+                submit_review = st.form_submit_button("Save review")
+            if submit_review:
+                try:
+                    add_trade_review(trade_to_review, review_text)
+                except (OSError, sqlite3.Error, ValueError) as error:
+                    st.error(f"Trade review was not saved: {error}")
+                else:
+                    st.success(f"Saved review for paper trade #{trade_to_review}.")
+                    st.rerun()
 
     with st.expander("Glossary"):
         st.markdown(
