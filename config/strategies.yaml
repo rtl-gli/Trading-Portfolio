@@ -4,3 +4,19 @@ sma:
   transaction_cost_bps_per_side: 5
   slippage_bps_per_side: 5
   execution_delay_bars: 1
+
+momentum:
+  lookback_sessions: 126
+  entry_return_threshold: 0.0
+  exit_return_threshold: 0.0
+
+mean_reversion:
+  lookback_sessions: 20
+  entry_z_score: 2.0
+  exit_z_score: 0.0
+
+markowitz:
+  lookback_sessions: 252
+  rebalance_every_sessions: 21
+  risk_aversion: 5.0
+  maximum_weight: 0.5

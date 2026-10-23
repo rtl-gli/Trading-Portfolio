@@ -54,6 +54,22 @@ class DashboardSettings:
 
 
 @dataclass(frozen=True)
+class StrategySettings:
+    """Configured entry, exit, and rolling portfolio estimation assumptions."""
+
+    momentum_lookback_sessions: int
+    momentum_entry_return_threshold: float
+    momentum_exit_return_threshold: float
+    mean_reversion_lookback_sessions: int
+    mean_reversion_entry_z_score: float
+    mean_reversion_exit_z_score: float
+    markowitz_lookback_sessions: int
+    markowitz_rebalance_every_sessions: int
+    markowitz_risk_aversion: float
+    markowitz_maximum_weight: float
+
+
+@dataclass(frozen=True)
 class Universe:
     """Configured stock sectors and ETF building blocks."""
 
@@ -245,6 +261,79 @@ def load_dashboard_settings(
         default_asset=asset.strip().upper(),
         default_start_date=parsed_start,
         default_end_date=parsed_end,
+    )
+
+
+def load_strategy_settings(
+    path: Path = DEFAULT_STRATEGY_CONFIG_PATH,
+) -> StrategySettings:
+    """Load and validate momentum, mean-reversion, and Markowitz parameters."""
+    try:
+        with path.open(encoding="utf-8") as config_file:
+            raw_config = yaml.safe_load(config_file)
+    except yaml.YAMLError as error:
+        raise ValueError(f"Invalid strategy YAML configuration: {path}") from error
+    if not isinstance(raw_config, dict):
+        raise TypeError(f"Strategy config must be a mapping: {path}")
+
+    momentum = raw_config.get("momentum")
+    reversion = raw_config.get("mean_reversion")
+    markowitz = raw_config.get("markowitz")
+    if not all(
+        isinstance(section, dict) for section in (momentum, reversion, markowitz)
+    ):
+        raise TypeError(
+            "Strategy config requires momentum, mean_reversion, and markowitz."
+        )
+
+    def positive_integer(section: Mapping[str, object], key: str) -> int:
+        value = section.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{key} must be a positive integer.")
+        return value
+
+    def finite_number(section: Mapping[str, object], key: str) -> float:
+        value = section.get(key)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+        ):
+            raise ValueError(f"{key} must be a finite number.")
+        return float(value)
+
+    momentum_entry = finite_number(momentum, "entry_return_threshold")
+    momentum_exit = finite_number(momentum, "exit_return_threshold")
+    if momentum_exit > momentum_entry:
+        raise ValueError("Momentum exit threshold must not exceed its entry threshold.")
+    entry_z = finite_number(reversion, "entry_z_score")
+    exit_z = finite_number(reversion, "exit_z_score")
+    if entry_z <= 0 or exit_z < 0 or exit_z >= entry_z:
+        raise ValueError(
+            "Mean-reversion entry z-score must be positive and exceed exit z-score."
+        )
+    risk_aversion = finite_number(markowitz, "risk_aversion")
+    maximum_weight = finite_number(markowitz, "maximum_weight")
+    if risk_aversion <= 0:
+        raise ValueError("Markowitz risk_aversion must be positive.")
+    if not 0 < maximum_weight <= 1:
+        raise ValueError("Markowitz maximum_weight must be in (0, 1].")
+
+    return StrategySettings(
+        momentum_lookback_sessions=positive_integer(momentum, "lookback_sessions"),
+        momentum_entry_return_threshold=momentum_entry,
+        momentum_exit_return_threshold=momentum_exit,
+        mean_reversion_lookback_sessions=positive_integer(
+            reversion, "lookback_sessions"
+        ),
+        mean_reversion_entry_z_score=entry_z,
+        mean_reversion_exit_z_score=exit_z,
+        markowitz_lookback_sessions=positive_integer(markowitz, "lookback_sessions"),
+        markowitz_rebalance_every_sessions=positive_integer(
+            markowitz, "rebalance_every_sessions"
+        ),
+        markowitz_risk_aversion=risk_aversion,
+        markowitz_maximum_weight=maximum_weight,
     )
 
 

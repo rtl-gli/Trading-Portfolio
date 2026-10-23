@@ -25,8 +25,8 @@ def test_sma_waits_until_after_signal_and_fill_before_earning_returns() -> None:
     assert result.sma.positions.iloc[2] == 0
     assert result.sma.positions.iloc[3] == 0
     assert result.sma.positions.iloc[4] == 1
-    assert result.sma.transaction_costs.iloc[3] == pytest.approx(0.001)
-    assert result.sma.net_returns.iloc[3] < result.sma.gross_returns.iloc[3]
+    assert result.sma.transaction_costs.iloc[4] == pytest.approx(0.001)
+    assert result.sma.net_returns.iloc[4] < result.sma.gross_returns.iloc[4]
 
 
 def test_terminal_exit_cost_is_not_charged_twice() -> None:
@@ -82,7 +82,11 @@ def test_dashboard_defaults_match_configured_universe() -> None:
 
 def test_learning_notebooks_are_valid_json_with_compilable_code_cells() -> None:
     notebook_directory = Path(__file__).resolve().parents[1] / "notebooks"
-    for notebook_name in ("03_sma_backtest.ipynb", "04_performance_metrics.ipynb"):
+    for notebook_name in (
+        "03_sma_backtest.ipynb",
+        "04_performance_metrics.ipynb",
+        "06_walk_forward_strategies.ipynb",
+    ):
         notebook_path = notebook_directory / notebook_name
         notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
 

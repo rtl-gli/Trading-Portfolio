@@ -39,7 +39,7 @@ not automatically point-in-time or survivorship-bias-free.
 3. Notebook-first, cost-aware SMA backtest versus buy-and-hold (**complete**)
 4. Tested performance and risk metrics (**complete**)
 5. Streamlit strategy playground and learning mode (**complete**)
-6. Additional strategies and out-of-sample testing
+6. Additional strategies and out-of-sample testing (**complete**)
 7. Bias lab, predict-then-run, and quiz
 8. Paper-trading simulator and trade journal
 9. Audit logging, input validation, and threat model
@@ -54,25 +54,30 @@ tested.
 Requires Python 3.11 or newer.
 
 ```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
-```
-
-If PowerShell blocks environment activation, use the environment's interpreter
-directly instead:
-
-```powershell
+# Open the project folder in VS Code and run these in its integrated PowerShell terminal.
+python --version
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-Run checks with:
+Using the virtual environment's interpreter directly avoids PowerShell
+activation-policy issues and ensures each command uses the project's
+dependencies. Run the automated tests and lint check with:
 
 ```powershell
-python -m pytest
-python -m ruff check .
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m ruff check .
 ```
+
+Launch the dashboard from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run streamlit_app.py
+```
+
+The first run needs internet access for yfinance; matching later requests use
+the local cache. Stop the dashboard with `Ctrl+C`.
 
 ## Repository layout
 
@@ -145,28 +150,45 @@ not evidence of an edge or out-of-sample validation.
 
 ## Stage 5: Streamlit playground
 
-Start the app from the repository root:
+The sidebar lets you choose a strategy, asset or ETF portfolio, date range,
+signal parameters, transaction costs, and slippage. Streamlit reruns the
+research when an input changes; the local data cache prevents unnecessary
+repeat downloads. Learning mode is enabled by default and provides
+plain-English explanations, caveats, and a short glossary beside the results.
+The dashboard reports data source, retrieval time, missing observations, and
+any leading sessions excluded before the selected assets overlap.
 
-```powershell
-streamlit run src\portfolio_research\dashboard.py
-```
+Interactive controls make runs easier to inspect, but do not prove a strategy
+is robust. The held-out period is deliberately short enough to make sample-size
+limitations visible; the planned bias lab is not implemented yet.
 
-The sidebar lets you choose one configured asset, a date range, SMA windows,
-transaction costs, and slippage. Streamlit reruns the research when an input
-changes; the local data cache prevents unnecessary repeat downloads. Learning
-mode is enabled by default and provides plain-English explanations, caveats,
-and a short glossary beside the results. The dashboard reports data source,
-retrieval time, missing observations, and any leading sessions excluded before
-the selected asset and SPY both have prices.
+## Stage 6: momentum, mean reversion, and Markowitz
 
-This is still one SMA strategy and one selected asset at a time. It does not
-yet implement portfolio allocation, walk-forward validation, or the planned
-bias lab; a visually interactive dashboard does not make an in-sample backtest
-evidence of a durable strategy.
+The playground now also compares long/flat momentum and mean-reversion rules.
+Their lookbacks and thresholds are configured in `config/strategies.yaml`.
+Parameters are held fixed rather than searched against the evaluation period.
+The dashboard reserves the initial 70% of selected dates as signal warm-up or
+estimation history and reports performance only over the final 30%, starting
+the simulated portfolio in cash and charging entry and exit costs.
+
+The Markowitz option uses a selected basket of the four configured ETFs. It
+estimates expected daily returns and covariance from a rolling historical
+window, rebalances at the configured interval, enforces long-only weights and
+a maximum position, and passes weights through the same execution delay and
+cost model. The SciPy optimiser is used only on past observations available at
+each rebalance; estimation error and optimizer sensitivity remain serious
+limitations. A future increase in the asset universe can make the maximum
+weight infeasible; in that case, the optimizer fails explicitly rather than
+silently changing the limit.
+
+This is a single holdout, not nested walk-forward model selection. The fixed
+signal thresholds have not been tuned, and changing them after seeing holdout
+results would consume that holdout. The multi-strategy learning experiment is
+in `notebooks/06_walk_forward_strategies.ipynb`.
 
 ## Status and intended use
 
-Stages 1–5 are complete. Data downloads happen only when the caller invokes the
+Stages 1–6 are complete. Data downloads happen only when the caller invokes the
 pipeline or opens the dashboard; the repository does not place trades.
 Everything built here is for education and paper research, not financial
 advice or a claim of live or professional performance.

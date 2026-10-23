@@ -2,18 +2,29 @@
 
 from __future__ import annotations
 
-import pandas as pd
 import streamlit as st
 
-from portfolio_research.backtest import run_sma_vs_buy_and_hold
+from portfolio_research.backtest import (
+    run_buy_and_hold_backtest,
+    run_portfolio_backtest,
+    run_signal_backtest,
+)
 from portfolio_research.config import (
     SmaSettings,
     load_dashboard_settings,
     load_sma_settings,
+    load_strategy_settings,
     load_universe,
 )
 from portfolio_research.market_data import MarketDataError, load_prices
 from portfolio_research.metrics import calculate_metrics
+from portfolio_research.strategies import (
+    mean_reversion_signals,
+    momentum_signals,
+    rolling_markowitz_weights,
+    sma_signals,
+    walk_forward_start,
+)
 
 METRIC_LEARNING = {
     "CAGR": (
@@ -57,6 +68,7 @@ def main() -> None:
     st.set_page_config(page_title="Portfolio Research Lab", layout="wide")
     dashboard_settings = load_dashboard_settings()
     sma_defaults = load_sma_settings()
+    strategy_defaults = load_strategy_settings()
     universe = load_universe()
     if dashboard_settings.default_asset not in universe.symbols:
         st.error("dashboard.default_asset must appear in config/universe.yaml.")
@@ -74,12 +86,32 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Research inputs")
-        asset = st.selectbox(
-            "Asset",
-            options=universe.symbols,
-            index=universe.symbols.index(dashboard_settings.default_asset),
-            help="Choose the single asset for this SMA demonstration.",
+        strategy_name = st.selectbox(
+            "Strategy",
+            options=[
+                "SMA crossover",
+                "Momentum",
+                "Mean reversion",
+                "Walk-forward Markowitz",
+            ],
+            help="Compare fixed rules or rolling mean-variance allocation.",
         )
+        if strategy_name == "Walk-forward Markowitz":
+            selected_assets = st.multiselect(
+                "Portfolio assets",
+                options=tuple(universe.etfs),
+                default=list(universe.etfs),
+                help="Choose at least two ETFs for the long-only portfolio.",
+            )
+            asset = None
+        else:
+            asset = st.selectbox(
+                "Asset",
+                options=universe.symbols,
+                index=universe.symbols.index(dashboard_settings.default_asset),
+                help="Choose a single asset for this signal strategy.",
+            )
+            selected_assets = []
         date_range = st.date_input(
             "Date range (end date exclusive)",
             value=(
@@ -120,6 +152,45 @@ def main() -> None:
             step=1.0,
             help="An explicit execution-friction assumption, charged with transaction cost.",
         )
+        train_fraction = st.slider(
+            "Warm-up / estimation share",
+            min_value=0.5,
+            max_value=0.9,
+            value=0.7,
+            step=0.05,
+            help=(
+                "Only the final share is evaluated. Earlier data supplies trailing "
+                "signal history or rolling parameter estimates."
+            ),
+        )
+        if strategy_name == "Momentum":
+            momentum_lookback = st.number_input(
+                "Momentum lookback (sessions)",
+                min_value=2,
+                max_value=500,
+                value=strategy_defaults.momentum_lookback_sessions,
+                step=1,
+            )
+        else:
+            momentum_lookback = strategy_defaults.momentum_lookback_sessions
+        if strategy_name == "Mean reversion":
+            reversion_lookback = st.number_input(
+                "Mean-reversion lookback (sessions)",
+                min_value=2,
+                max_value=250,
+                value=strategy_defaults.mean_reversion_lookback_sessions,
+                step=1,
+            )
+            entry_z_score = st.slider(
+                "Entry z-score",
+                min_value=0.5,
+                max_value=4.0,
+                value=strategy_defaults.mean_reversion_entry_z_score,
+                step=0.1,
+            )
+        else:
+            reversion_lookback = strategy_defaults.mean_reversion_lookback_sessions
+            entry_z_score = strategy_defaults.mean_reversion_entry_z_score
         learning_mode = st.toggle(
             "Learning mode",
             value=True,
@@ -138,11 +209,18 @@ def main() -> None:
     if start_date >= end_date:
         st.error("The start date must be earlier than the exclusive end date.")
         return
-    if fast_window >= slow_window:
+    if strategy_name == "SMA crossover" and fast_window >= slow_window:
         st.error("The fast SMA window must be shorter than the slow SMA window.")
         return
+    if strategy_name == "Walk-forward Markowitz" and len(selected_assets) < 2:
+        st.error("Select at least two ETFs for Markowitz optimisation.")
+        return
 
-    symbols = [asset] if asset == "SPY" else [asset, "SPY"]
+    symbols = (
+        sorted(set(selected_assets) | {"SPY"})
+        if strategy_name == "Walk-forward Markowitz"
+        else ([asset] if asset == "SPY" else [asset, "SPY"])
+    )
     settings = SmaSettings(
         fast_window=int(fast_window),
         slow_window=int(slow_window),
@@ -164,14 +242,71 @@ def main() -> None:
                 "Investigate the data before comparing returns; this dashboard "
                 "does not fill or silently drop those bars."
             )
-        comparison = run_sma_vs_buy_and_hold(aligned_prices[asset], settings)
-        spy_returns = aligned_prices["SPY"].pct_change(fill_method=None)
+        split = walk_forward_start(aligned_prices.index, train_fraction)
+        holdout_prices = aligned_prices.iloc[split:]
+        if strategy_name == "Walk-forward Markowitz":
+            weights = rolling_markowitz_weights(
+                aligned_prices.loc[:, selected_assets],
+                lookback_sessions=strategy_defaults.markowitz_lookback_sessions,
+                rebalance_every_sessions=(
+                    strategy_defaults.markowitz_rebalance_every_sessions
+                ),
+                risk_aversion=strategy_defaults.markowitz_risk_aversion,
+                maximum_weight=strategy_defaults.markowitz_maximum_weight,
+                settings=strategy_defaults,
+            )
+            strategy_result = run_portfolio_backtest(
+                holdout_prices.loc[:, selected_assets],
+                weights.loc[holdout_prices.index],
+                settings,
+            )
+            strategy_returns = strategy_result.net_returns
+            strategy_positions = strategy_result.positions
+            benchmark_result = run_buy_and_hold_backtest(
+                holdout_prices["SPY"], settings
+            )
+            benchmark_returns = benchmark_result.net_returns
+            benchmark_label = "SPY buy-and-hold"
+            strategy_label = "Rolling Markowitz, net of costs"
+        else:
+            if strategy_name == "SMA crossover":
+                signals = sma_signals(
+                    aligned_prices[asset],
+                    int(fast_window),
+                    int(slow_window),
+                )
+            elif strategy_name == "Momentum":
+                signals = momentum_signals(
+                    aligned_prices[asset],
+                    int(momentum_lookback),
+                    strategy_defaults.momentum_entry_return_threshold,
+                    strategy_defaults.momentum_exit_return_threshold,
+                )
+            else:
+                signals = mean_reversion_signals(
+                    aligned_prices[asset],
+                    int(reversion_lookback),
+                    float(entry_z_score),
+                    strategy_defaults.mean_reversion_exit_z_score,
+                )
+            strategy_result = run_signal_backtest(
+                holdout_prices[asset],
+                signals.loc[holdout_prices.index],
+                settings,
+            )
+            benchmark_result = run_buy_and_hold_backtest(
+                holdout_prices[asset], settings
+            )
+            strategy_returns = strategy_result.net_returns
+            strategy_positions = strategy_result.positions.rename(asset).to_frame()
+            benchmark_returns = benchmark_result.net_returns
+            benchmark_label = f"{asset} buy-and-hold, net of costs"
+            strategy_label = f"{strategy_name}, net of costs"
+        spy_returns = holdout_prices["SPY"].pct_change(fill_method=None)
         spy_returns.iloc[0] = 0.0
-        sma_metrics = calculate_metrics(comparison.sma.net_returns, spy_returns)
-        hold_metrics = calculate_metrics(
-            comparison.buy_and_hold.net_returns, spy_returns
-        )
-    except (MarketDataError, ValueError) as error:
+        strategy_metrics = calculate_metrics(strategy_returns, spy_returns)
+        benchmark_metrics = calculate_metrics(benchmark_returns, spy_returns)
+    except (MarketDataError, RuntimeError, ValueError) as error:
         st.error(f"Research run stopped: {error}")
         return
 
@@ -187,44 +322,51 @@ def main() -> None:
     st.caption(f"Missing data by requested asset: {data.quality.missing_by_symbol}")
     if excluded_initial_bars:
         st.info(
-            f"Excluded {excluded_initial_bars} leading sessions before {asset} and "
-            "SPY both had prices. No missing prices were imputed."
+            f"Excluded {excluded_initial_bars} leading sessions before the selected "
+            "assets and SPY all had prices. No missing prices were imputed."
         )
 
-    st.subheader(f"{asset}: SMA crossover versus buy-and-hold")
+    st.subheader(f"{strategy_name}: out-of-sample comparison")
+    st.caption(
+        f"Performance shown from {holdout_prices.index[0].date()}. The earlier "
+        "period provides signal warm-up or rolling parameter estimates."
+    )
+    if strategy_name == "Walk-forward Markowitz":
+        st.info(
+            "Markowitz weights use trailing historical means and covariance. "
+            "These estimates are noisy, and optimizer sensitivity can concentrate "
+            "the portfolio at the configured weight cap."
+        )
     metric_columns = st.columns(6)
     metric_values = (
-        ("CAGR", sma_metrics.cagr, hold_metrics.cagr),
-        ("Sharpe", sma_metrics.sharpe_ratio, hold_metrics.sharpe_ratio),
-        ("Max drawdown", sma_metrics.max_drawdown, hold_metrics.max_drawdown),
+        ("CAGR", strategy_metrics.cagr, benchmark_metrics.cagr),
+        ("Sharpe", strategy_metrics.sharpe_ratio, benchmark_metrics.sharpe_ratio),
+        ("Max drawdown", strategy_metrics.max_drawdown, benchmark_metrics.max_drawdown),
         (
             "Volatility",
-            sma_metrics.annualized_volatility,
-            hold_metrics.annualized_volatility,
+            strategy_metrics.annualized_volatility,
+            benchmark_metrics.annualized_volatility,
         ),
-        ("Historical VaR", sma_metrics.historical_var, hold_metrics.historical_var),
-        ("Beta vs SPY", sma_metrics.beta, hold_metrics.beta),
+        (
+            "Historical VaR",
+            strategy_metrics.historical_var,
+            benchmark_metrics.historical_var,
+        ),
+        ("Beta vs SPY", strategy_metrics.beta, benchmark_metrics.beta),
     )
     for column, (label, strategy_value, benchmark_value) in zip(
         metric_columns, metric_values, strict=True
     ):
         with column:
             _display_metric(label, strategy_value, METRIC_LEARNING[label][0])
-            st.caption(f"Buy-and-hold: {_format_metric(label, benchmark_value)}")
+            st.caption(f"{benchmark_label}: {_format_metric(label, benchmark_value)}")
             if learning_mode:
                 explanation, caveat = METRIC_LEARNING[label]
                 st.caption(f"**What it means:** {explanation}")
                 st.caption(f"**Why it can mislead:** {caveat}")
 
-    wealth = (
-        (1 + comparison.sma.net_returns)
-        .cumprod()
-        .rename("SMA, net of costs")
-        .to_frame()
-    )
-    wealth["Buy-and-hold, net of costs"] = (
-        1 + comparison.buy_and_hold.net_returns
-    ).cumprod()
+    wealth = (1 + strategy_returns).cumprod().rename(strategy_label).to_frame()
+    wealth[benchmark_label] = (1 + benchmark_returns).cumprod()
     st.subheader("Growth of a notional $1")
     st.line_chart(wealth)
     if learning_mode:
@@ -235,21 +377,16 @@ def main() -> None:
         )
 
     st.subheader("Position and modeled costs")
-    daily_detail = pd.DataFrame(
-        {
-            "SMA position": comparison.sma.positions,
-            "SMA transaction cost": comparison.sma.transaction_costs,
-            "Buy-and-hold transaction cost": comparison.buy_and_hold.transaction_costs,
-        }
-    )
-    st.line_chart(daily_detail)
+    st.line_chart(strategy_positions)
+    if strategy_name == "Walk-forward Markowitz":
+        st.dataframe(strategy_positions.tail(), use_container_width=True)
     if learning_mode:
         st.caption(
-            "Positions change only after delayed signals. Costs are fractions of "
-            "portfolio value on the simulated execution date, including final exit."
+            "Positions change only after delayed signals or optimizer weights. "
+            "Transaction costs and slippage are charged on all turnover and final exit."
         )
 
-    warnings = (*sma_metrics.warnings, *hold_metrics.warnings)
+    warnings = (*strategy_metrics.warnings, *benchmark_metrics.warnings)
     if warnings:
         st.warning("Metric limitations: " + " ".join(dict.fromkeys(warnings)))
 

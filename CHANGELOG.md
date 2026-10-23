@@ -11,6 +11,8 @@ Notable project changes are recorded here.
 - Added a delayed, cost- and slippage-aware SMA versus buy-and-hold backtest.
 - Added tested performance metrics and two stage-by-stage learning notebooks.
 - Added a Streamlit SMA playground with learning mode, data diagnostics, and glossary.
+- Added momentum, mean-reversion, capped long-only Markowitz, and chronological holdout evaluation.
+- Applied execution delays and transaction costs consistently across strategies and added walk-forward tests.
 
 ## [0.1.0] - Initial foundation
 
