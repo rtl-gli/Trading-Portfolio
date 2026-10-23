@@ -34,8 +34,8 @@ not automatically point-in-time or survivorship-bias-free.
 ## Build roadmap
 
 1. Repository setup, environment, folder structure, and secrets handling
-   (**current stage**)
-2. Validated market-data ingestion and local caching
+   (**complete**)
+2. Validated market-data ingestion and local caching (**complete**)
 3. Notebook-first, cost-aware SMA backtest versus buy-and-hold
 4. Tested performance and risk metrics
 5. Streamlit strategy playground and learning mode
@@ -97,9 +97,32 @@ introduced, its credentials should be supplied through environment variables
 or an ignored local secrets file; the project must never print or audit-log
 secret values.
 
+## Stage 2: market data
+
+The fixed universe is in `config/universe.yaml`: 30 present-day US stocks
+labelled across all 11 sectors, plus SPY, QQQ, TLT, and GLD. Load the list and
+request adjusted daily prices with `portfolio_research.config.load_universe`
+and `portfolio_research.market_data.load_prices`. The end date is exclusive,
+matching yfinance's convention.
+
+The pipeline validates symbols, date order, duplicate daily bars, numeric and
+positive prices, infinite values, and requested ticker coverage. It reports
+missing observations per symbol and does **not** fill or discard them. Results
+are cached as compressed CSV files under `data/cache/` (ignored by Git).
+Fresh cache entries are reused; offline mode can return an expired entry, but
+labels it `stale_cache`. The configured cache lifetime is in
+`config/project.yaml`.
+
+`yfinance` is a convenient, free research source, not a point-in-time or
+institutional data feed. `auto_adjust=True` supplies adjusted prices, but
+adjustments and historical records can change; delisted companies and past
+index constituents are not restored by this present-day universe. Cache
+timestamps identify when data was retrieved locally, not whether the provider's
+history is immutable or survivorship-bias-free.
+
 ## Status and intended use
 
-This repository currently contains project scaffolding only. It does not
-download data, generate signals, backtest strategies, or place trades.
-Everything built here is for education and paper research, not financial advice
-or a claim of live or professional performance.
+Stages 1 and 2 are complete. Data downloads happen only when the caller invokes
+the pipeline; this repository does not yet generate signals, backtest
+strategies, or place trades. Everything built here is for education and paper
+research, not financial advice or a claim of live or professional performance.

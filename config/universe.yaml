@@ -1,0 +1,50 @@
+# Fixed present-day constituents for learning, not a historical point-in-time
+# universe. See README.md for the resulting survivorship-bias limitation.
+stocks_by_sector:
+  Information Technology:
+    - AAPL
+    - MSFT
+    - NVDA
+  Health Care:
+    - LLY
+    - JNJ
+    - ABBV
+  Financials:
+    - JPM
+    - BRK-B
+    - GS
+  Consumer Discretionary:
+    - AMZN
+    - TSLA
+    - MCD
+  Communication Services:
+    - GOOGL
+    - META
+    - NFLX
+  Industrials:
+    - CAT
+    - GE
+    - HON
+  Consumer Staples:
+    - WMT
+    - COST
+    - PG
+  Energy:
+    - XOM
+    - CVX
+    - COP
+  Utilities:
+    - NEE
+    - SO
+  Real Estate:
+    - PLD
+    - AMT
+  Materials:
+    - LIN
+    - SHW
+
+etfs:
+  SPY: US equity benchmark
+  QQQ: Nasdaq-100 equity benchmark
+  TLT: long-term US Treasury bond exposure
+  GLD: gold exposure

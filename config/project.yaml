@@ -7,3 +7,5 @@ project:
 data:
   provider: yfinance
   cache_directory: data/cache
+  cache_ttl_hours: 24
+  interval: 1d
