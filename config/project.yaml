@@ -1,0 +1,9 @@
+project:
+  name: portfolio-research-lab
+  classification: self-directed academic project
+  reporting_currency: USD
+  market_timezone: America/New_York
+
+data:
+  provider: yfinance
+  cache_directory: data/cache
