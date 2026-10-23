@@ -14,3 +14,8 @@ analytics:
   periods_per_year: 252
   annual_risk_free_rate: 0.0
   var_confidence: 0.95
+
+dashboard:
+  default_asset: SPY
+  default_start_date: 2005-01-03
+  default_end_date: 2026-01-01

@@ -38,7 +38,7 @@ not automatically point-in-time or survivorship-bias-free.
 2. Validated market-data ingestion and local caching (**complete**)
 3. Notebook-first, cost-aware SMA backtest versus buy-and-hold (**complete**)
 4. Tested performance and risk metrics (**complete**)
-5. Streamlit strategy playground and learning mode
+5. Streamlit strategy playground and learning mode (**complete**)
 6. Additional strategies and out-of-sample testing
 7. Bias lab, predict-then-run, and quiz
 8. Paper-trading simulator and trade journal
@@ -143,9 +143,30 @@ Annualisation assumes the configured 252 periods per year; historical VaR is a
 sample quantile, not a forecast. One SMA setting on SPY is a demonstration,
 not evidence of an edge or out-of-sample validation.
 
+## Stage 5: Streamlit playground
+
+Start the app from the repository root:
+
+```powershell
+streamlit run src\portfolio_research\dashboard.py
+```
+
+The sidebar lets you choose one configured asset, a date range, SMA windows,
+transaction costs, and slippage. Streamlit reruns the research when an input
+changes; the local data cache prevents unnecessary repeat downloads. Learning
+mode is enabled by default and provides plain-English explanations, caveats,
+and a short glossary beside the results. The dashboard reports data source,
+retrieval time, missing observations, and any leading sessions excluded before
+the selected asset and SPY both have prices.
+
+This is still one SMA strategy and one selected asset at a time. It does not
+yet implement portfolio allocation, walk-forward validation, or the planned
+bias lab; a visually interactive dashboard does not make an in-sample backtest
+evidence of a durable strategy.
+
 ## Status and intended use
 
-Stages 1–4 are complete. Data downloads happen only when the caller invokes the
-pipeline; the repository does not place trades. Everything built here is for
-education and paper research, not financial advice or a claim of live or
-professional performance.
+Stages 1–5 are complete. Data downloads happen only when the caller invokes the
+pipeline or opens the dashboard; the repository does not place trades.
+Everything built here is for education and paper research, not financial
+advice or a claim of live or professional performance.

@@ -3,6 +3,7 @@
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -41,6 +42,15 @@ class MetricSettings:
     periods_per_year: int
     annual_risk_free_rate: float
     var_confidence: float
+
+
+@dataclass(frozen=True)
+class DashboardSettings:
+    """Configured defaults for the interactive dashboard."""
+
+    default_asset: str
+    default_start_date: date
+    default_end_date: date
 
 
 @dataclass(frozen=True)
@@ -195,6 +205,46 @@ def load_metric_settings(path: Path = DEFAULT_PROJECT_CONFIG_PATH) -> MetricSett
         periods_per_year=periods_per_year,
         annual_risk_free_rate=float(annual_risk_free_rate),
         var_confidence=float(var_confidence),
+    )
+
+
+def load_dashboard_settings(
+    path: Path = DEFAULT_PROJECT_CONFIG_PATH,
+) -> DashboardSettings:
+    """Load and validate dashboard defaults from the project YAML."""
+    try:
+        with path.open(encoding="utf-8") as config_file:
+            raw_config = yaml.safe_load(config_file)
+    except yaml.YAMLError as error:
+        raise ValueError(f"Invalid project YAML configuration: {path}") from error
+
+    dashboard = raw_config.get("dashboard") if isinstance(raw_config, dict) else None
+    if not isinstance(dashboard, dict):
+        raise TypeError(f"Project config must contain a dashboard mapping: {path}")
+    asset = dashboard.get("default_asset")
+    start_date = dashboard.get("default_start_date")
+    end_date = dashboard.get("default_end_date")
+    if not isinstance(asset, str) or not asset.strip():
+        raise ValueError("dashboard.default_asset must be a non-empty symbol.")
+
+    def parse_config_date(value: object, name: str) -> date:
+        if isinstance(value, date):
+            return value
+        if isinstance(value, str):
+            try:
+                return date.fromisoformat(value)
+            except ValueError as error:
+                raise ValueError(f"dashboard.{name} must be an ISO date.") from error
+        raise TypeError(f"dashboard.{name} must be an ISO date.")
+
+    parsed_start = parse_config_date(start_date, "default_start_date")
+    parsed_end = parse_config_date(end_date, "default_end_date")
+    if parsed_start >= parsed_end:
+        raise ValueError("Dashboard default start date must be before its end date.")
+    return DashboardSettings(
+        default_asset=asset.strip().upper(),
+        default_start_date=parsed_start,
+        default_end_date=parsed_end,
     )
 
 

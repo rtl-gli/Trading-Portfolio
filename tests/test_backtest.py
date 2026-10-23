@@ -5,7 +5,11 @@ import pandas as pd
 import pytest
 
 from portfolio_research.backtest import run_sma_vs_buy_and_hold
-from portfolio_research.config import SmaSettings, load_sma_settings
+from portfolio_research.config import (
+    SmaSettings,
+    load_dashboard_settings,
+    load_sma_settings,
+)
 
 
 def test_sma_waits_until_after_signal_and_fill_before_earning_returns() -> None:
@@ -67,6 +71,13 @@ def test_configured_sma_parameters_are_loaded_from_yaml() -> None:
     assert settings.transaction_cost_bps_per_side == 5
     assert settings.slippage_bps_per_side == 5
     assert settings.execution_delay_bars >= 1
+
+
+def test_dashboard_defaults_match_configured_universe() -> None:
+    dashboard_settings = load_dashboard_settings()
+
+    assert dashboard_settings.default_asset == "SPY"
+    assert dashboard_settings.default_start_date < dashboard_settings.default_end_date
 
 
 def test_learning_notebooks_are_valid_json_with_compilable_code_cells() -> None:

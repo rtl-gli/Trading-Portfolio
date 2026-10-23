@@ -10,6 +10,7 @@ Notable project changes are recorded here.
 - Documented survivorship and provider-history limitations.
 - Added a delayed, cost- and slippage-aware SMA versus buy-and-hold backtest.
 - Added tested performance metrics and two stage-by-stage learning notebooks.
+- Added a Streamlit SMA playground with learning mode, data diagnostics, and glossary.
 
 ## [0.1.0] - Initial foundation
 
