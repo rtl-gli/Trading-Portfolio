@@ -8,6 +8,8 @@ Notable project changes are recorded here.
 - Added validated daily adjusted-price ingestion with compressed local caching.
 - Added freshness and offline-cache reporting, data-quality diagnostics, and tests.
 - Documented survivorship and provider-history limitations.
+- Added a delayed, cost- and slippage-aware SMA versus buy-and-hold backtest.
+- Added tested performance metrics and two stage-by-stage learning notebooks.
 
 ## [0.1.0] - Initial foundation
 

@@ -9,3 +9,8 @@ data:
   cache_directory: data/cache
   cache_ttl_hours: 24
   interval: 1d
+
+analytics:
+  periods_per_year: 252
+  annual_risk_free_rate: 0.0
+  var_confidence: 0.95

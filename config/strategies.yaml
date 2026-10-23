@@ -1,0 +1,6 @@
+sma:
+  fast_window: 50
+  slow_window: 200
+  transaction_cost_bps_per_side: 5
+  slippage_bps_per_side: 5
+  execution_delay_bars: 1

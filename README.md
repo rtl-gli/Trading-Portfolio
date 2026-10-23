@@ -36,8 +36,8 @@ not automatically point-in-time or survivorship-bias-free.
 1. Repository setup, environment, folder structure, and secrets handling
    (**complete**)
 2. Validated market-data ingestion and local caching (**complete**)
-3. Notebook-first, cost-aware SMA backtest versus buy-and-hold
-4. Tested performance and risk metrics
+3. Notebook-first, cost-aware SMA backtest versus buy-and-hold (**complete**)
+4. Tested performance and risk metrics (**complete**)
 5. Streamlit strategy playground and learning mode
 6. Additional strategies and out-of-sample testing
 7. Bias lab, predict-then-run, and quiz
@@ -120,9 +120,32 @@ index constituents are not restored by this present-day universe. Cache
 timestamps identify when data was retrieved locally, not whether the provider's
 history is immutable or survivorship-bias-free.
 
+## Stages 3–4: SMA backtest and analytics
+
+The first experiment compares one configured, long-only SMA crossover on
+adjusted daily closes with buy-and-hold. Fast/slow windows, per-side transaction
+cost, per-side slippage, and execution delay live in `config/strategies.yaml`;
+metric conventions live under `analytics` in `config/project.yaml`.
+
+An SMA signal uses the closing price at its signal date. The backtest waits for
+the configured execution delay to fill the signal at a later close, then waits
+until the next return interval before crediting market performance. This avoids
+earning a return from before the assumed fill. Costs apply on signal-driven
+trades and final liquidation; buy-and-hold also pays entry and liquidation
+costs. Missing prices fail the backtest instead of being filled. The notebook
+in `notebooks/03_sma_backtest.ipynb` walks through the experiment.
+
+Tested metrics include CAGR, annualised Sharpe ratio, maximum drawdown,
+annualised volatility, historical VaR, and beta versus the explicitly supplied
+benchmark. Undefined Sharpe/beta values come with warnings. Metric conventions
+and synthetic-return experiments are in `notebooks/04_performance_metrics.ipynb`.
+Annualisation assumes the configured 252 periods per year; historical VaR is a
+sample quantile, not a forecast. One SMA setting on SPY is a demonstration,
+not evidence of an edge or out-of-sample validation.
+
 ## Status and intended use
 
-Stages 1 and 2 are complete. Data downloads happen only when the caller invokes
-the pipeline; this repository does not yet generate signals, backtest
-strategies, or place trades. Everything built here is for education and paper
-research, not financial advice or a claim of live or professional performance.
+Stages 1–4 are complete. Data downloads happen only when the caller invokes the
+pipeline; the repository does not place trades. Everything built here is for
+education and paper research, not financial advice or a claim of live or
+professional performance.

@@ -9,6 +9,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PROJECT_CONFIG_PATH = PROJECT_ROOT / "config" / "project.yaml"
+DEFAULT_STRATEGY_CONFIG_PATH = PROJECT_ROOT / "config" / "strategies.yaml"
 DEFAULT_UNIVERSE_PATH = PROJECT_ROOT / "config" / "universe.yaml"
 
 
@@ -20,6 +21,26 @@ class DataSettings:
     cache_directory: Path
     cache_ttl_hours: float
     interval: str
+
+
+@dataclass(frozen=True)
+class SmaSettings:
+    """Configured SMA windows, trading costs, and execution delay."""
+
+    fast_window: int
+    slow_window: int
+    transaction_cost_bps_per_side: float
+    slippage_bps_per_side: float
+    execution_delay_bars: int
+
+
+@dataclass(frozen=True)
+class MetricSettings:
+    """Configured annualisation, risk-free rate, and VaR confidence."""
+
+    periods_per_year: int
+    annual_risk_free_rate: float
+    var_confidence: float
 
 
 @dataclass(frozen=True)
@@ -80,6 +101,100 @@ def load_data_settings(path: Path = DEFAULT_PROJECT_CONFIG_PATH) -> DataSettings
         cache_directory=cache_path,
         cache_ttl_hours=float(cache_ttl_hours),
         interval=interval,
+    )
+
+
+def load_sma_settings(path: Path = DEFAULT_STRATEGY_CONFIG_PATH) -> SmaSettings:
+    """Load SMA parameters and reject invalid or unsafe configurations."""
+    try:
+        with path.open(encoding="utf-8") as config_file:
+            raw_config = yaml.safe_load(config_file)
+    except yaml.YAMLError as error:
+        raise ValueError(f"Invalid strategy YAML configuration: {path}") from error
+
+    sma = raw_config.get("sma") if isinstance(raw_config, dict) else None
+    if not isinstance(sma, dict):
+        raise TypeError(f"Strategy config must contain an sma mapping: {path}")
+
+    fast_window = sma.get("fast_window")
+    slow_window = sma.get("slow_window")
+    transaction_cost = sma.get("transaction_cost_bps_per_side")
+    slippage = sma.get("slippage_bps_per_side")
+    execution_delay = sma.get("execution_delay_bars")
+    if (
+        isinstance(fast_window, bool)
+        or not isinstance(fast_window, int)
+        or fast_window <= 0
+        or isinstance(slow_window, bool)
+        or not isinstance(slow_window, int)
+        or slow_window <= fast_window
+    ):
+        raise ValueError("SMA windows must be positive integers with fast < slow.")
+    if (
+        isinstance(execution_delay, bool)
+        or not isinstance(execution_delay, int)
+        or execution_delay < 1
+    ):
+        raise ValueError("execution_delay_bars must be an integer of at least 1.")
+    costs = (transaction_cost, slippage)
+    if any(
+        isinstance(cost, bool)
+        or not isinstance(cost, (int, float))
+        or not math.isfinite(cost)
+        or cost < 0
+        for cost in costs
+    ):
+        raise ValueError(
+            "Configured cost and slippage must be finite and non-negative."
+        )
+
+    return SmaSettings(
+        fast_window=fast_window,
+        slow_window=slow_window,
+        transaction_cost_bps_per_side=float(transaction_cost),
+        slippage_bps_per_side=float(slippage),
+        execution_delay_bars=execution_delay,
+    )
+
+
+def load_metric_settings(path: Path = DEFAULT_PROJECT_CONFIG_PATH) -> MetricSettings:
+    """Load and validate performance-metric conventions."""
+    try:
+        with path.open(encoding="utf-8") as config_file:
+            raw_config = yaml.safe_load(config_file)
+    except yaml.YAMLError as error:
+        raise ValueError(f"Invalid project YAML configuration: {path}") from error
+
+    analytics = raw_config.get("analytics") if isinstance(raw_config, dict) else None
+    if not isinstance(analytics, dict):
+        raise TypeError(f"Project config must contain an analytics mapping: {path}")
+    periods_per_year = analytics.get("periods_per_year")
+    annual_risk_free_rate = analytics.get("annual_risk_free_rate")
+    var_confidence = analytics.get("var_confidence")
+    if (
+        isinstance(periods_per_year, bool)
+        or not isinstance(periods_per_year, int)
+        or periods_per_year <= 0
+    ):
+        raise ValueError("analytics.periods_per_year must be a positive integer.")
+    if (
+        isinstance(annual_risk_free_rate, bool)
+        or not isinstance(annual_risk_free_rate, (int, float))
+        or not math.isfinite(annual_risk_free_rate)
+        or annual_risk_free_rate <= -1
+    ):
+        raise ValueError("analytics.annual_risk_free_rate must be finite and > -1.")
+    if (
+        isinstance(var_confidence, bool)
+        or not isinstance(var_confidence, (int, float))
+        or not 0 < var_confidence < 1
+    ):
+        raise ValueError("analytics.var_confidence must be between 0 and 1.")
+
+    return MetricSettings(
+        periods_per_year=periods_per_year,
+        annual_risk_free_rate=float(annual_risk_free_rate),
+        var_confidence=float(var_confidence),
     )
 
 
