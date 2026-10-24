@@ -8,6 +8,7 @@ from portfolio_research.config import (
     load_strategy_settings,
 )
 from portfolio_research.strategies import (
+    equal_weight_targets,
     mean_reversion_signals,
     momentum_signals,
     rolling_markowitz_weights,
@@ -102,6 +103,49 @@ def test_markowitz_weights_are_long_only_capped_and_sum_to_one() -> None:
     assert available.min().min() >= 0
     assert available.max().max() <= 0.60000001
     assert np.allclose(available.sum(axis=1), 1.0)
+
+
+def test_equal_weight_targets_rebalance_on_configured_sessions() -> None:
+    index = pd.bdate_range("2024-01-01", periods=8)
+    prices = pd.DataFrame(
+        {"AAA": np.arange(100, 108), "BBB": np.arange(200, 208)}, index=index
+    )
+
+    weights = equal_weight_targets(prices, rebalance_every_sessions=3)
+
+    assert weights.loc[index[[0, 3, 6]]].notna().all().all()
+    assert weights.loc[index[[1, 2, 4, 5, 7]]].isna().all().all()
+    assert np.allclose(weights.dropna().sum(axis=1), 1.0)
+    assert np.allclose(weights.dropna().to_numpy(), 0.5)
+
+
+def test_equal_weight_targets_reject_invalid_frequency_and_gaps() -> None:
+    prices = pd.DataFrame(
+        {"AAA": [10, 11, 12], "BBB": [10, 9, 11]},
+        index=pd.bdate_range("2024-01-01", periods=3),
+    )
+    with pytest.raises(ValueError, match="positive integer"):
+        equal_weight_targets(prices, 0)
+    prices.iloc[1, 0] = np.nan
+    with pytest.raises(ValueError, match="missing observations"):
+        equal_weight_targets(prices, 1)
+
+
+def test_equal_weight_targets_use_delayed_costed_portfolio_execution() -> None:
+    from portfolio_research.backtest import run_portfolio_backtest
+
+    index = pd.bdate_range("2024-01-01", periods=8)
+    prices = pd.DataFrame(
+        {"AAA": np.arange(100, 108), "BBB": np.arange(200, 208)}, index=index
+    )
+    targets = equal_weight_targets(prices, rebalance_every_sessions=3)
+
+    result = run_portfolio_backtest(prices, targets, SmaSettings(2, 3, 5, 5, 1))
+
+    assert np.allclose(result.positions.iloc[0], [0.0, 0.0])
+    assert np.allclose(result.positions.iloc[2], [0.5, 0.5])
+    assert result.transaction_costs.iloc[2] == pytest.approx(0.001)
+    assert result.transaction_costs.iloc[-1] == pytest.approx(0.001)
 
 
 def test_markowitz_weights_at_date_do_not_use_future_prices() -> None:

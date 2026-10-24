@@ -149,6 +149,24 @@ def _solve_long_only_weights(
     return weights
 
 
+def equal_weight_targets(
+    prices: pd.DataFrame, rebalance_every_sessions: int = 21
+) -> pd.DataFrame:
+    """Create sparse, periodically rebalanced equal-weight portfolio targets."""
+    if (
+        isinstance(rebalance_every_sessions, bool)
+        or not isinstance(rebalance_every_sessions, int)
+        or rebalance_every_sessions < 1
+    ):
+        raise ValueError("Rebalance frequency must be a positive integer.")
+    validated, _ = validate_prices(prices)
+    if validated.isna().any().any():
+        raise ValueError("Equal-weight price panel contains missing observations.")
+    weights = pd.DataFrame(np.nan, index=validated.index, columns=validated.columns)
+    weights.iloc[::rebalance_every_sessions] = 1 / len(validated.columns)
+    return weights
+
+
 def rolling_markowitz_weights(
     prices: pd.DataFrame,
     symbols: Sequence[str] | None = None,

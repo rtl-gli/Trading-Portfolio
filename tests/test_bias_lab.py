@@ -14,16 +14,23 @@ from portfolio_research.config import SmaSettings
 def test_signal_bias_comparison_exposes_cost_and_future_signal_variants() -> None:
     index = pd.bdate_range("2024-01-01", periods=12)
     prices = pd.Series(np.linspace(100, 120, len(index)), index=index)
-    signals = pd.Series(1.0, index=index)
+    signals = pd.Series(
+        [0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0],
+        index=index,
+    )
     settings = SmaSettings(2, 3, 5, 5, 1)
 
     result = compare_signal_biases(prices, signals, settings)
 
     assert result.costs_ignored.net_returns.sum() > result.baseline.net_returns.sum()
-    expected_leaky = run_signal_backtest(prices, signals.shift(-1), settings)
+    expected_leaky = run_signal_backtest(
+        prices, signals.shift(-(settings.execution_delay_bars + 1)), settings
+    )
     pd.testing.assert_series_equal(
         result.future_signal_used.net_returns, expected_leaky.net_returns
     )
+    assert result.baseline.positions.iloc[2] == signals.iloc[0]
+    assert result.future_signal_used.positions.iloc[2] == signals.iloc[2]
     assert len(result.warnings) == 2
 
 
@@ -46,6 +53,10 @@ def test_portfolio_bias_comparison_uses_selected_portfolio() -> None:
     assert result.costs_ignored.net_returns.sum() > result.baseline.net_returns.sum()
     assert result.future_weights_used is not None
     assert result.future_weights_used.net_returns.index.equals(index)
+    assert result.baseline.positions.iloc[5].to_list() == pytest.approx([1.0, 0.0])
+    assert result.future_weights_used.positions.iloc[5].to_list() == pytest.approx(
+        [0.0, 1.0]
+    )
 
 
 def test_overfit_demo_reports_full_sample_selection_and_limitation() -> None:

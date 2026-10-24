@@ -35,6 +35,7 @@ from portfolio_research.paper_trading import (
 )
 from portfolio_research.quiz import select_question
 from portfolio_research.strategies import (
+    equal_weight_targets,
     mean_reversion_signals,
     momentum_signals,
     rolling_markowitz_weights,
@@ -67,6 +68,15 @@ METRIC_LEARNING = {
         "Return covariance with SPY divided by SPY return variance.",
         "Beta depends on the benchmark and sample; it does not measure all portfolio risk.",
     ),
+}
+
+METRIC_FIELDS = {
+    "CAGR": "cagr",
+    "Sharpe": "sharpe_ratio",
+    "Max drawdown": "max_drawdown",
+    "Volatility": "annualized_volatility",
+    "Historical VaR": "historical_var",
+    "Beta vs SPY": "beta",
 }
 
 
@@ -251,6 +261,9 @@ def main() -> None:
         st.error("Select at least two ETFs for Markowitz optimisation.")
         return
 
+    equal_weight_returns = None
+    equal_weight_positions = None
+    equal_weight_targets_panel = None
     run_signature = (
         strategy_name,
         tuple(selected_assets),
@@ -332,11 +345,29 @@ def main() -> None:
             benchmark_returns = benchmark_result.net_returns
             benchmark_label = "SPY buy-and-hold"
             strategy_label = "Rolling Markowitz, net of costs"
+            equal_weight_targets_panel = equal_weight_targets(
+                holdout_prices.loc[:, selected_assets],
+                strategy_defaults.markowitz_rebalance_every_sessions,
+            )
+            equal_weight_result = run_portfolio_backtest(
+                holdout_prices.loc[:, selected_assets],
+                equal_weight_targets_panel,
+                settings,
+            )
+            equal_weight_returns = equal_weight_result.net_returns
+            equal_weight_positions = equal_weight_result.positions
             audit_run_id = audit_signal_run(
                 strategy_name,
                 selected_assets,
                 weights.loc[:, selected_assets],
                 strategy_positions,
+                settings,
+            )
+            equal_weight_audit_run_id = audit_signal_run(
+                "Equal-weight ETF benchmark",
+                selected_assets,
+                equal_weight_targets_panel,
+                equal_weight_positions,
                 settings,
             )
         else:
@@ -380,10 +411,16 @@ def main() -> None:
                 strategy_positions,
                 settings,
             )
+            equal_weight_audit_run_id = None
         spy_returns = holdout_prices["SPY"].pct_change(fill_method=None)
         spy_returns.iloc[0] = 0.0
         strategy_metrics = calculate_metrics(strategy_returns, spy_returns)
         benchmark_metrics = calculate_metrics(benchmark_returns, spy_returns)
+        equal_weight_metrics = (
+            calculate_metrics(equal_weight_returns, spy_returns)
+            if equal_weight_returns is not None
+            else None
+        )
     except (MarketDataError, RuntimeError, ValueError) as error:
         st.error(f"Research run stopped: {error}")
         return
@@ -398,6 +435,11 @@ def main() -> None:
         f"Observed dates: {data.quality.first_date} to {data.quality.last_date}"
     )
     st.caption(f"Signal audit run ID: `{audit_run_id}` (local hash-chained log)")
+    if equal_weight_audit_run_id:
+        st.caption(
+            "Equal-weight audit run ID: "
+            f"`{equal_weight_audit_run_id}` (local hash-chained log)"
+        )
     st.caption(f"Missing data by requested asset: {data.quality.missing_by_symbol}")
     if excluded_initial_bars:
         st.info(
@@ -439,6 +481,11 @@ def main() -> None:
         with column:
             _display_metric(label, strategy_value, METRIC_LEARNING[label][0])
             st.caption(f"{benchmark_label}: {_format_metric(label, benchmark_value)}")
+            if equal_weight_metrics is not None:
+                st.caption(
+                    "Equal-weight ETF basket: "
+                    f"{_format_metric(label, getattr(equal_weight_metrics, METRIC_FIELDS[label]))}"
+                )
             if learning_mode:
                 explanation, caveat = METRIC_LEARNING[label]
                 st.caption(f"**What it means:** {explanation}")
@@ -474,6 +521,10 @@ def main() -> None:
 
     wealth = (1 + strategy_returns).cumprod().rename(strategy_label).to_frame()
     wealth[benchmark_label] = (1 + benchmark_returns).cumprod()
+    if equal_weight_returns is not None:
+        wealth["Equal-weight ETF basket, net of costs"] = (
+            1 + equal_weight_returns
+        ).cumprod()
     st.subheader("Growth of a notional $1")
     st.line_chart(wealth)
     if learning_mode:
@@ -486,14 +537,18 @@ def main() -> None:
     st.subheader("Position and modeled costs")
     st.line_chart(strategy_positions)
     if strategy_name == "Walk-forward Markowitz":
-        st.dataframe(strategy_positions.tail(), use_container_width=True)
+        st.dataframe(strategy_positions.tail(), width="stretch")
     if learning_mode:
         st.caption(
             "Positions change only after delayed signals or optimizer weights. "
             "Transaction costs and slippage are charged on all turnover and final exit."
         )
 
-    warnings = (*strategy_metrics.warnings, *benchmark_metrics.warnings)
+    warnings = (
+        *strategy_metrics.warnings,
+        *benchmark_metrics.warnings,
+        *(equal_weight_metrics.warnings if equal_weight_metrics else ()),
+    )
     if warnings:
         st.warning("Metric limitations: " + " ".join(dict.fromkeys(warnings)))
 
@@ -536,17 +591,20 @@ def main() -> None:
                         "rebalance target exists in this holdout."
                     )
                 else:
-                    bias_rows["Tomorrow's signal used today"] = calculate_metrics(
-                        lookahead_returns,
-                        spy_returns,
-                    ).cagr
+                    bias_rows["Future signal leaked into return period"] = (
+                        calculate_metrics(
+                            lookahead_returns,
+                            spy_returns,
+                        ).cagr
+                    )
             st.dataframe(
                 pd.DataFrame.from_dict(bias_rows, orient="index", columns=["CAGR"]),
-                use_container_width=True,
+                width="stretch",
             )
             st.caption(
-                "The look-ahead variant feeds tomorrow's already-known signal or "
-                "portfolio weights into today's position. It is intentionally invalid."
+                "The look-ahead variant uses a future signal or portfolio target "
+                "from the end of a return interval to choose exposure for that "
+                "same interval. It is intentionally invalid."
             )
         if show_overfit_bias:
             if strategy_name == "Walk-forward Markowitz":
@@ -571,7 +629,7 @@ def main() -> None:
                         },
                         index=["Terminal wealth per $1 before visualization"],
                     ),
-                    use_container_width=True,
+                    width="stretch",
                 )
                 st.warning(overfit.warning)
 
@@ -682,7 +740,7 @@ def main() -> None:
                         for trade in reversed(paper_portfolio.trades)
                     ]
                 ),
-                use_container_width=True,
+                width="stretch",
             )
             trade_to_review = st.selectbox(
                 "Trade to review",

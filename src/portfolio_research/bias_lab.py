@@ -60,14 +60,18 @@ def compare_signal_biases(
             slippage_bps_per_side=0.0,
         ),
     )
-    future_signal_used = run_signal_backtest(prices, signals.shift(-1), settings)
+    future_signal_used = run_signal_backtest(
+        prices,
+        signals.shift(-(settings.execution_delay_bars + 1)),
+        settings,
+    )
     return BiasDemonstration(
         baseline=baseline,
         costs_ignored=costs_ignored,
         future_signal_used=future_signal_used,
         warnings=(
             "Costs-off results are not implementable; real execution has friction.",
-            "Look-ahead results use tomorrow's signal today and are invalid.",
+            "Look-ahead results use a signal from the end of the return interval.",
         ),
     )
 
@@ -86,7 +90,7 @@ def compare_portfolio_biases(
             slippage_bps_per_side=0.0,
         ),
     )
-    shifted_weights = target_weights.shift(-1)
+    shifted_weights = target_weights.shift(-(settings.execution_delay_bars + 1))
     has_future_target = shifted_weights.notna().all(axis=1).any()
     future_weights_used = (
         run_portfolio_backtest(prices, shifted_weights, settings)

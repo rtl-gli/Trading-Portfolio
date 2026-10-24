@@ -21,10 +21,10 @@ strategies rigorously—not a live-trading system or investment advice.
 
 ## Planned research scope
 
-The platform is intended to cover approximately 30 large-cap US stocks across
-all 11 sectors, plus SPY, QQQ, TLT, and GLD. Planned comparisons include SMA
-crossover, momentum, mean reversion, mean-variance optimisation, equal weight,
-and buy-and-hold.
+The platform covers approximately 30 large-cap US stocks across all 11 sectors,
+plus SPY, QQQ, TLT, and GLD. Implemented comparisons include SMA crossover,
+momentum, mean reversion, mean-variance optimisation, an equal-weight ETF
+basket, and buy-and-hold.
 
 Evaluation includes CAGR, Sharpe ratio, maximum drawdown, volatility, VaR, and
 beta versus SPY. A free historical-data source can revise or omit observations;
@@ -42,7 +42,7 @@ locally cached data is not automatically point-in-time or survivorship-bias-free
 7. Bias lab, predict-then-run, and quiz (**complete**)
 8. Paper-trading simulator and trade journal (**complete**)
 9. Audit logging, input validation, and threat model (**complete**)
-10. Results, limitations, and project write-up (**methods complete; empirical run pending**)
+10. Results, limitations, and project write-up (**complete; one exploratory run documented**)
 
 Each stage is intended to add a small learning notebook before the corresponding
 production module. Features are described as planned until implemented and
@@ -177,11 +177,13 @@ The Markowitz option uses a selected basket of the four configured ETFs. It
 estimates expected daily returns and covariance from a rolling historical
 window, rebalances at the configured interval, enforces long-only weights and
 a maximum position, and passes weights through the same execution delay and
-cost model. The SciPy optimiser is used only on past observations available at
-each rebalance; estimation error and optimizer sensitivity remain serious
-limitations. A future increase in the asset universe can make the maximum
-weight infeasible; in that case, the optimizer fails explicitly rather than
-silently changing the limit.
+cost model. It is compared with both SPY buy-and-hold and a periodically
+rebalanced equal-weight portfolio built from the same selected ETFs, with the
+same execution delay, costs, and terminal liquidation. The SciPy optimiser is
+used only on past observations available at each rebalance; estimation error
+and optimizer sensitivity remain serious limitations. A future increase in
+the asset universe can make the maximum weight infeasible; in that case, the
+optimizer fails explicitly rather than silently changing the limit.
 
 This is a single holdout, not nested walk-forward model selection. The fixed
 signal thresholds have not been tuned, and changing them after seeing holdout
@@ -195,11 +197,12 @@ beat its benchmark and your estimated maximum drawdown. The dashboard compares
 those predictions with the held-out result; changing a research input requires
 a new prediction.
 
-The bias lab can deliberately remove costs, use tomorrow's signal or portfolio
-weights today, or select SMA parameters using the full sample. These variants
-are explicitly labelled invalid and are never reported as honest out-of-sample
-results. The overfit demo reports the best full-sample setting on the same
-observations used to choose it. The quiz tests concepts covered in the code.
+The bias lab can deliberately remove costs, use a signal or portfolio target
+from the end of a return interval to select exposure for that same interval,
+or select SMA parameters using the full sample. These variants are explicitly
+labelled invalid and are never reported as honest out-of-sample results. The
+overfit demo reports the best full-sample setting on the same observations used
+to choose it. The quiz tests concepts covered in the code.
 See `notebooks/07_bias_lab.ipynb`.
 
 ## Stage 8: paper trading and trade journal
@@ -231,11 +234,12 @@ The audit-log lesson is in `notebooks/09_audit_log.ipynb`.
 
 ## Status and intended use
 
-Stages 1–10 are complete as a research platform and methods write-up. **No
-empirical strategy results have been verified yet**, so the report does not
-claim measured performance. Data downloads happen only when the caller invokes
-the pipeline or opens the dashboard; the repository does not place real trades.
-Everything built here is for education and paper research, not financial advice
-or a claim of live or professional performance. Read
+Stages 1–10 are complete as a research platform and methods write-up. The
+report contains one explicitly limited historical SPY holdout example; it does
+not claim a strategy edge or future performance. Data downloads happen only
+when the caller invokes the pipeline or opens the dashboard; the repository
+does not place real trades. Everything built here is for education and paper
+research, not financial advice or a claim of live or professional performance.
+Read
 [`docs/research-writeup.md`](docs/research-writeup.md) for the research question,
 method, reporting template, and next steps.

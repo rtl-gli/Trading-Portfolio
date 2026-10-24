@@ -40,8 +40,9 @@ gaps or independently verify the provider's corporate-action adjustments.
 - **Markowitz:** long-only ETF weights estimated from trailing sample means
   and covariance, subject to a maximum asset weight and configured rebalance
   interval.
-- **Benchmarks:** buy-and-hold for the selected stock/ETF and SPY for the
-  portfolio strategy. A standalone equal-weight strategy is not implemented.
+- **Benchmarks:** buy-and-hold for the selected stock/ETF, and SPY
+  buy-and-hold plus a periodically rebalanced equal-weight version of the
+  selected ETFs for the Markowitz portfolio.
 
 Signals use only information available at their signal close. The configured
 execution delay and the following return interval prevent a signal from
@@ -68,11 +69,44 @@ future performance.
 
 ## Results
 
-**No empirical strategy results are reported in this repository yet.** A live
-market-data download and a documented dashboard run have not been verified
-for this write-up. Do not replace this statement with generated figures until
-the data source, retrieval time, evaluation dates, assumptions, and failed
-strategies have been checked.
+One exploratory, reproducible-in-method run was calculated from the locally
+cached SPY history on 2026-10-24. The loader reported cache retrieval time
+2026-10-23 22:07:39 UTC, 5,283 observations from 2005-01-03 through
+2025-12-31, and zero missing SPY observations. This was a cache read, not a
+fresh provider download. The configured date range ended 2026-01-01
+(exclusive); the initial 70% of observations supplied signal history and the
+final 30% formed the holdout, from 2019-09-12 through 2025-12-31 (1,585
+sessions). The portfolio started the holdout in cash.
+
+The evaluated rule used a 50-session / 200-session SMA, a one-session
+execution delay plus the following return interval, 5 bps per-side transaction
+cost, and 5 bps per-side slippage. The benchmark was SPY buy-and-hold over the
+same holdout, with matching cost assumptions. Metrics are rounded:
+
+| Metric | SMA crossover | SPY buy-and-hold |
+| --- | ---: | ---: |
+| CAGR | 9.36% | 15.56% |
+| Sharpe ratio | 0.61 | 0.82 |
+| Maximum drawdown | -33.72% | -33.72% |
+| Annualised volatility | 17.00% | 20.33% |
+| Historical VaR (95%) | 1.44% | 1.77% |
+| Beta versus SPY | 0.70 | 1.00 |
+
+The SMA lagged the benchmark by 6.21 percentage points of annualised CAGR.
+Both drawdowns ran from 2020-02-19 to 2020-03-23, when both portfolios were
+fully invested; the equal drawdown is a property of this sample, not proof that
+the strategy protects against large losses. The user predicted that the SMA
+would beat its benchmark; it did not. At the user's direction, a 20% working
+drawdown guess was recorded as the assistant's estimate, not represented as
+the user's forecast; the realized drawdown was 13.72 percentage points deeper.
+
+This one run is not a fresh market-data retrieval, a statistical test, or
+evidence of a repeatable edge. It is a single asset, one fixed rule, and one
+holdout with known survivorship and provider-history limitations. The local
+cache is excluded from Git, so a clone cannot reproduce the exact price series
+unless the provider returns identical history. Do not generalize these results
+or treat the cached data as immutable. Re-run with verified data and save the
+exact cache/provider timestamp and commit before using the figures elsewhere.
 
 For each reproducible run, record the following:
 
