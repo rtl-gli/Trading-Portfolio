@@ -69,6 +69,9 @@ dependencies. Run the automated tests and lint check with:
 .\.venv\Scripts\python.exe -m ruff check .
 ```
 
+GitHub Actions runs formatting, lint, and the complete test suite on Python
+3.11 and 3.13 for pushes to `main`, pull requests, and manual workflow runs.
+
 Launch the dashboard from the repository root:
 
 ```powershell
