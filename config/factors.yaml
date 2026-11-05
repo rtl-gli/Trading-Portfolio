@@ -1,0 +1,7 @@
+provider: ken_french
+cache_directory: data/cache/factors
+portfolio_start_date: "2013-01-01"
+hac_lags: 3
+default_models:
+  - ff3
+  - ff5

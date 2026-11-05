@@ -9,8 +9,9 @@ st.caption(
     "first principles, validated honestly, and taught to a beginner."
 )
 st.info(
-    "The option-pricing page now includes tested Black-Scholes and binomial "
-    "reference models. Factor regressions, regime estimates, Longstaff-Schwartz, "
+    "The factor-regression page now includes FF3/FF5 estimates with "
+    "Newey-West inference, and the option-pricing page includes tested "
+    "Black-Scholes/binomial references. Regime switching, Longstaff-Schwartz, "
     "and Heston calibration remain unfinished."
 )
 st.markdown(

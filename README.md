@@ -14,8 +14,9 @@ The project has changed direction from the earlier portfolio-strategy
 playground. Stage 1 established the package, pinned environment, Streamlit
 scaffold, secrets checks, and a local SPY option-chain snapshot tool. Stage 2
 adds validated local snapshot loading plus tested Black-Scholes and
-Cox-Ross-Rubinstein reference pricers. Fama-French, regime switching,
-Longstaff-Schwartz, and Heston remain unfinished.
+Cox-Ross-Rubinstein reference pricers. Stage 3 adds the FF3/FF5 monthly
+regression, validated data alignment, and Newey-West inference. Regime
+switching, Longstaff-Schwartz, and Heston remain unfinished.
 
 | Module | Model | Validation and built-in limitation |
 | --- | --- | --- |
@@ -64,8 +65,8 @@ Launch the new multipage app:
 .\.venv\Scripts\python.exe -m streamlit run app/Home.py
 ```
 
-The factor, regime, and Heston pages remain placeholders until their
-calculations pass validation tests. The options page includes Black-Scholes
+The factor page includes tested FF3/FF5 regression calculations; the regime
+and Heston pages remain placeholders. The options page includes Black-Scholes
 and binomial reference models, but not Longstaff-Schwartz yet. The earlier
 portfolio-strategy code is retained under
 `src/portfolio_research/` and documented separately in
@@ -119,6 +120,30 @@ manifest is unchanged; it is not a digital signature or proof of provenance.
 Snapshot quotes may be stale or unsynchronized and are not used as calibrated
 model inputs in this stage. See [`docs/options-pricing.md`](docs/options-pricing.md)
 for formulas, assumptions, and limitations.
+
+## Stage 3: Fama-French factors
+
+The factor page fits both FF3 and FF5 regressions. It builds monthly portfolio
+returns from validated adjusted daily closes, lets you edit long-only weights,
+and aligns those returns by calendar month with the official Ken French factor
+library. Factor values and `RF` are converted from percent to decimal units;
+missing sentinels are left missing and reported, never filled. The dependent
+variable is portfolio return minus `RF`. Coefficient uncertainty uses
+Newey-West/HAC standard errors with the configured default lag count.
+
+The first request can download monthly factor ZIP files from
+[Ken French's Data Library](https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html);
+later runs use the SHA-256-verified local cache in `data/cache/factors/`.
+Adjusted prices use the existing yfinance cache. The page asks for an alpha
+prediction before requesting the data or showing estimates.
+
+Run the learning experiment in
+[`notebooks/fama_french_regression.ipynb`](notebooks/fama_french_regression.ipynb).
+The regression and data-source details are in
+[`docs/fama-french.md`](docs/fama-french.md). The default sample begins at the
+date in `config/factors.yaml`. This fixed, present-day stock universe is
+survivorship-biased, and its monthly rebalanced returns are gross of costs;
+they are explanatory inputs, not an investable backtest.
 
 ### Secrets and local data
 
@@ -191,8 +216,8 @@ Each model will include:
 
 ## Current scope
 
-Stages 1 and 2 provide the application foundation, local option snapshots,
-and validated Black-Scholes/binomial reference pricers. The factor regression,
-regime model, Longstaff-Schwartz, Heston calibration, quizzes, and public
+Stages 1–3 provide the application foundation, local option snapshots,
+Black-Scholes/binomial reference pricers, and tested FF3/FF5 regressions.
+Regime switching, Longstaff-Schwartz, Heston calibration, quizzes, and public
 deployment remain future work. No investment recommendation or claim of
 predictive ability is made.

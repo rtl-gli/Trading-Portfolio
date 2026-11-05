@@ -9,6 +9,7 @@ Notable project changes are recorded here.
 - Added a validated SPY option-chain snapshot script with local, hash-documented output and overwrite protection.
 - Updated the configured 30-stock list to the new factor-regression research universe.
 - Added Black-Scholes and CRR binomial pricing, validated local snapshot loading, and a prediction-before-run learning page.
+- Added FF3/FF5 data parsing and caching, monthly portfolio returns, exact factor alignment, and Newey-West regression inference.
 
 ## [Archived] - Portfolio Research Lab direction
 
