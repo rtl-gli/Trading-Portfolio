@@ -9,8 +9,9 @@ st.caption(
     "first principles, validated honestly, and taught to a beginner."
 )
 st.info(
-    "The factor-regression module is the first planned model page. The other "
-    "pages are scaffolding until their numerical implementations pass tests."
+    "The option-pricing page now includes tested Black-Scholes and binomial "
+    "reference models. Factor regressions, regime estimates, Longstaff-Schwartz, "
+    "and Heston calibration remain unfinished."
 )
 st.markdown(
     """

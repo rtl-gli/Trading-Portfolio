@@ -46,7 +46,7 @@ NUMERIC_CHAIN_COLUMNS = (
     "openInterest",
     "impliedVolatility",
 )
-_SPY_OPTION_SYMBOL = re.compile(r"SPY\d{6}[CP]\d{8}\Z")
+_SPY_OPTION_SYMBOL = re.compile(r"SPY(?P<expiration>\d{6})(?P<side>[CP])\d{8}\Z")
 
 
 class OptionSnapshotError(RuntimeError):
@@ -158,10 +158,20 @@ def _normalize_option_side(
         )
     normalized = options.loc[:, REQUIRED_CHAIN_COLUMNS].copy()
     contract_symbols = normalized["contractSymbol"].astype(str).str.strip()
-    if not contract_symbols.map(
-        lambda symbol: bool(_SPY_OPTION_SYMBOL.fullmatch(symbol))
-    ).all():
+    symbol_matches = contract_symbols.map(_SPY_OPTION_SYMBOL.fullmatch)
+    if symbol_matches.isna().any():
         raise OptionSnapshotError("Option contract symbols must match the SPY format.")
+    expected_expiration = expiration[2:].replace("-", "")
+    expected_side = "C" if option_type == "call" else "P"
+    if not symbol_matches.map(
+        lambda match: (
+            match.group("expiration") == expected_expiration
+            and match.group("side") == expected_side
+        )
+    ).all():
+        raise OptionSnapshotError(
+            "Option contract symbols must match their expiration and option type."
+        )
     normalized["contractSymbol"] = contract_symbols
     for column in NUMERIC_CHAIN_COLUMNS:
         original = normalized[column]
@@ -281,3 +291,184 @@ def capture_option_snapshot(
         contract_count=len(snapshot),
         expiration_count=len(expirations),
     )
+
+
+def load_option_snapshot(manifest_path: Path) -> pd.DataFrame:
+    """Load a local snapshot only after verifying its manifest and data."""
+    manifest_path = Path(manifest_path)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise OptionSnapshotError(
+            f"Unable to read option snapshot manifest: {manifest_path}"
+        ) from error
+    if not isinstance(manifest, dict):
+        raise OptionSnapshotError("Option snapshot manifest must be a JSON object.")
+    if (
+        type(manifest.get("schema_version")) is not int
+        or manifest["schema_version"] != 1
+    ):
+        raise OptionSnapshotError("Unsupported option snapshot schema version.")
+    if manifest.get("provider") != "yfinance" or manifest.get("underlying") != "SPY":
+        raise OptionSnapshotError("Snapshot provider or underlying is not supported.")
+    if manifest.get("data_file") != "spy_options.csv.gz":
+        raise OptionSnapshotError(
+            "Snapshot manifest contains an invalid data filename."
+        )
+
+    snapshot_date_text = manifest.get("snapshot_date")
+    timezone = manifest.get("timezone")
+    retrieved_text = manifest.get("retrieved_at_utc")
+    try:
+        snapshot_date = date.fromisoformat(snapshot_date_text)
+        zone = ZoneInfo(timezone)
+        retrieved_at = datetime.fromisoformat(retrieved_text)
+    except (TypeError, ValueError, ZoneInfoNotFoundError) as error:
+        raise OptionSnapshotError(
+            "Snapshot manifest contains an invalid date, time zone, or timestamp."
+        ) from error
+    if snapshot_date.isoformat() != snapshot_date_text:
+        raise OptionSnapshotError("Snapshot date must use YYYY-MM-DD format.")
+    if retrieved_at.tzinfo is None or retrieved_at.utcoffset() is None:
+        raise OptionSnapshotError(
+            "Snapshot retrieval timestamp must include a time zone."
+        )
+    if retrieved_at.astimezone(zone).date() != snapshot_date:
+        raise OptionSnapshotError(
+            "Snapshot date does not match the retrieval time and configured time zone."
+        )
+
+    expiration_dates = manifest.get("expiration_dates")
+    if not isinstance(expiration_dates, list) or not expiration_dates:
+        raise OptionSnapshotError("Snapshot manifest must list its expiration dates.")
+    if not all(isinstance(item, str) for item in expiration_dates):
+        raise OptionSnapshotError("Snapshot expiration dates must be strings.")
+    try:
+        parsed_expirations = [date.fromisoformat(item) for item in expiration_dates]
+    except (TypeError, ValueError) as error:
+        raise OptionSnapshotError(
+            "Snapshot manifest contains an invalid expiration date."
+        ) from error
+    if [
+        item.isoformat() for item in parsed_expirations
+    ] != expiration_dates or expiration_dates != sorted(set(expiration_dates)):
+        raise OptionSnapshotError(
+            "Snapshot expiration dates must be unique and sorted as YYYY-MM-DD."
+        )
+
+    expected_counts = ("contract_count", "call_count", "put_count")
+    counts = {key: manifest.get(key) for key in expected_counts}
+    if any(
+        isinstance(count, bool) or not isinstance(count, int) or count < 0
+        for count in counts.values()
+    ):
+        raise OptionSnapshotError("Snapshot manifest contains invalid contract counts.")
+    if (
+        counts["contract_count"] <= 0
+        or counts["call_count"] + counts["put_count"] != counts["contract_count"]
+    ):
+        raise OptionSnapshotError("Snapshot manifest contract counts are inconsistent.")
+    data_path = manifest_path.parent / "spy_options.csv.gz"
+    expected_digest = manifest.get("data_sha256")
+    if (
+        not isinstance(expected_digest, str)
+        or re.fullmatch(r"[a-f0-9]{64}", expected_digest) is None
+    ):
+        raise OptionSnapshotError(
+            "Snapshot manifest contains an invalid SHA-256 digest."
+        )
+    try:
+        actual_digest = _sha256_file(data_path)
+    except OSError as error:
+        raise OptionSnapshotError(
+            f"Unable to read option snapshot data: {data_path}"
+        ) from error
+    if actual_digest != expected_digest:
+        raise OptionSnapshotError(
+            "Option snapshot data does not match its SHA-256 digest."
+        )
+
+    try:
+        snapshot = pd.read_csv(data_path)
+    except (
+        OSError,
+        UnicodeDecodeError,
+        pd.errors.ParserError,
+        pd.errors.EmptyDataError,
+    ) as error:
+        raise OptionSnapshotError(
+            f"Unable to parse option snapshot data: {data_path}"
+        ) from error
+    required_columns = set(REQUIRED_CHAIN_COLUMNS) | {"expiration", "option_type"}
+    missing_columns = sorted(required_columns - set(snapshot.columns))
+    if missing_columns:
+        raise OptionSnapshotError(
+            f"Option snapshot is missing required columns: {missing_columns}."
+        )
+    if len(snapshot) != counts["contract_count"]:
+        raise OptionSnapshotError("Snapshot row count does not match its manifest.")
+    if snapshot.empty:
+        raise OptionSnapshotError("Option snapshot contains no contracts.")
+    if (~snapshot["option_type"].isin(("call", "put"))).any():
+        raise OptionSnapshotError("Snapshot option_type must be 'call' or 'put'.")
+    if (~snapshot["expiration"].isin(expiration_dates)).any():
+        raise OptionSnapshotError("Snapshot contains an unlisted expiration date.")
+    if set(snapshot["expiration"].unique()) != set(expiration_dates):
+        raise OptionSnapshotError("Snapshot expirations do not match its manifest.")
+    if int(snapshot["option_type"].eq("call").sum()) != counts["call_count"]:
+        raise OptionSnapshotError("Snapshot call count does not match its manifest.")
+    if int(snapshot["option_type"].eq("put").sum()) != counts["put_count"]:
+        raise OptionSnapshotError("Snapshot put count does not match its manifest.")
+    if snapshot.duplicated(["expiration", "option_type", "contractSymbol"]).any():
+        raise OptionSnapshotError("Snapshot contains duplicate option contracts.")
+    trade_dates = pd.to_datetime(snapshot["lastTradeDate"], errors="coerce", utc=True)
+    if (snapshot["lastTradeDate"].notna() & trade_dates.isna()).any():
+        raise OptionSnapshotError("Snapshot last-trade dates must be valid timestamps.")
+
+    symbol_matches = (
+        snapshot["contractSymbol"]
+        .astype(str)
+        .str.strip()
+        .map(_SPY_OPTION_SYMBOL.fullmatch)
+    )
+    if symbol_matches.isna().any():
+        raise OptionSnapshotError("Snapshot contains an invalid SPY option symbol.")
+    for row_index, match in symbol_matches.items():
+        expiration = snapshot.at[row_index, "expiration"]
+        option_type = snapshot.at[row_index, "option_type"]
+        expected_side = "C" if option_type == "call" else "P"
+        if (
+            match.group("expiration") != expiration[2:].replace("-", "")
+            or match.group("side") != expected_side
+        ):
+            raise OptionSnapshotError(
+                "Snapshot option symbols do not match their expiration and type."
+            )
+
+    for column in NUMERIC_CHAIN_COLUMNS:
+        original = snapshot[column]
+        converted = pd.to_numeric(original, errors="coerce")
+        if (original.notna() & converted.isna()).any():
+            raise OptionSnapshotError(
+                f"Option snapshot column {column!r} contains non-numeric values."
+            )
+        if not all(math.isfinite(value) for value in converted.dropna()):
+            raise OptionSnapshotError(
+                f"Option snapshot column {column!r} contains infinite values."
+            )
+        snapshot[column] = converted
+    if snapshot["strike"].isna().any() or (snapshot["strike"] <= 0).any():
+        raise OptionSnapshotError("Every snapshot strike must be present and positive.")
+    for column in (
+        "lastPrice",
+        "bid",
+        "ask",
+        "volume",
+        "openInterest",
+        "impliedVolatility",
+    ):
+        if (snapshot[column].dropna() < 0).any():
+            raise OptionSnapshotError(
+                f"Snapshot column {column!r} must not contain negative values."
+            )
+    return snapshot

@@ -9,6 +9,7 @@ from quant_models.data.options_snapshot import (
     OptionSnapshotError,
     SnapshotSettings,
     capture_option_snapshot,
+    load_option_snapshot,
     load_snapshot_settings,
 )
 
@@ -30,11 +31,15 @@ CHAIN_COLUMNS = (
 )
 
 
-def _chain(contract_prefix: str, strike: float) -> pd.DataFrame:
+def _chain(expiration: str, option_type: str, strike: float) -> pd.DataFrame:
+    side = "C" if option_type == "call" else "P"
+    contract_symbol = (
+        f"SPY{expiration[2:].replace('-', '')}{side}{int(strike * 1000):08d}"
+    )
     return pd.DataFrame(
         [
             [
-                f"{contract_prefix}260101C{int(strike * 1000):08d}",
+                contract_symbol,
                 pd.Timestamp("2026-10-30T15:00:00Z"),
                 strike,
                 1.0,
@@ -64,8 +69,8 @@ class FakeOptionChain:
             "OptionChain",
             (),
             {
-                "calls": _chain("SPY", 500.0),
-                "puts": _chain("SPY", 450.0),
+                "calls": _chain(date, "call", 500.0),
+                "puts": _chain(date, "put", 450.0),
             },
         )()
 
@@ -97,6 +102,27 @@ def test_snapshot_saves_all_expirations_and_hash_manifest(tmp_path) -> None:
     saved = pd.read_csv(result.data_path)
     assert len(saved) == 4
     assert set(saved["option_type"]) == {"call", "put"}
+    loaded = load_option_snapshot(result.manifest_path)
+    assert len(loaded) == 4
+    assert set(loaded["expiration"]) == {"2026-11-20", "2026-12-18"}
+
+
+def test_snapshot_loader_rejects_data_that_does_not_match_manifest(tmp_path) -> None:
+    settings = SnapshotSettings(
+        provider="yfinance",
+        underlying="SPY",
+        timezone="America/New_York",
+        snapshot_directory=tmp_path,
+    )
+    result = capture_option_snapshot(
+        FakeOptionChain(),
+        settings,
+        retrieved_at=datetime(2026, 11, 5, 15, 0, tzinfo=UTC),
+    )
+    result.data_path.write_bytes(result.data_path.read_bytes() + b"tampered")
+
+    with pytest.raises(OptionSnapshotError, match="SHA-256 digest"):
+        load_option_snapshot(result.manifest_path)
 
 
 def test_snapshot_will_not_overwrite_existing_daily_directory(tmp_path) -> None:
@@ -128,12 +154,12 @@ def test_snapshot_rejects_bad_market_values_and_missing_columns(tmp_path) -> Non
         snapshot_directory=tmp_path,
     )
     invalid_ticker = FakeOptionChain()
-    invalid_ticker.option_chain = lambda date: type(
+    invalid_ticker.option_chain = lambda expiration: type(
         "OptionChain",
         (),
         {
-            "calls": _chain("SPY", 0.0),
-            "puts": _chain("SPY", 450.0),
+            "calls": _chain(expiration, "call", 0.0),
+            "puts": _chain(expiration, "put", 450.0),
         },
     )()
     with pytest.raises(OptionSnapshotError, match="positive"):
@@ -144,12 +170,12 @@ def test_snapshot_rejects_bad_market_values_and_missing_columns(tmp_path) -> Non
         )
 
     missing_column_ticker = FakeOptionChain()
-    missing_column_ticker.option_chain = lambda date: type(
+    missing_column_ticker.option_chain = lambda expiration: type(
         "OptionChain",
         (),
         {
             "calls": pd.DataFrame({"strike": [500.0]}),
-            "puts": _chain("SPY", 450.0),
+            "puts": _chain(expiration, "put", 450.0),
         },
     )()
     with pytest.raises(OptionSnapshotError, match="missing required columns"):
@@ -160,14 +186,14 @@ def test_snapshot_rejects_bad_market_values_and_missing_columns(tmp_path) -> Non
         )
 
     invalid_symbol_ticker = FakeOptionChain()
-    invalid_calls = _chain("SPY", 500.0)
+    invalid_calls = _chain("2026-12-18", "call", 500.0)
     invalid_calls.loc[0, "contractSymbol"] = "=1+1"
     invalid_symbol_ticker.option_chain = lambda date: type(
         "OptionChain",
         (),
         {
             "calls": invalid_calls,
-            "puts": _chain("SPY", 450.0),
+            "puts": _chain("2026-12-18", "put", 450.0),
         },
     )()
     with pytest.raises(OptionSnapshotError, match="SPY format"):
@@ -175,6 +201,23 @@ def test_snapshot_rejects_bad_market_values_and_missing_columns(tmp_path) -> Non
             invalid_symbol_ticker,
             settings,
             retrieved_at=datetime(2026, 11, 7, 15, 0, tzinfo=UTC),
+        )
+    mismatched_symbol_ticker = FakeOptionChain()
+    mismatched_calls = _chain("2026-12-18", "call", 500.0)
+    mismatched_calls.loc[0, "contractSymbol"] = "SPY260101C00500000"
+    mismatched_symbol_ticker.option_chain = lambda date: type(
+        "OptionChain",
+        (),
+        {
+            "calls": mismatched_calls,
+            "puts": _chain("2026-12-18", "put", 450.0),
+        },
+    )()
+    with pytest.raises(OptionSnapshotError, match="expiration and option type"):
+        capture_option_snapshot(
+            mismatched_symbol_ticker,
+            settings,
+            retrieved_at=datetime(2026, 11, 8, 15, 0, tzinfo=UTC),
         )
 
 

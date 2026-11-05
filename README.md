@@ -11,10 +11,11 @@ trading, real-money performance, or professional client work.
 ## Current milestone
 
 The project has changed direction from the earlier portfolio-strategy
-playground. This first setup milestone establishes the package, pinned
-environment, Streamlit page skeleton, secrets checks, and a local SPY option
-chain snapshot tool. The models below are planned; no estimates or prices are
-presented until their implementations and validation tests exist.
+playground. Stage 1 established the package, pinned environment, Streamlit
+scaffold, secrets checks, and a local SPY option-chain snapshot tool. Stage 2
+adds validated local snapshot loading plus tested Black-Scholes and
+Cox-Ross-Rubinstein reference pricers. Fama-French, regime switching,
+Longstaff-Schwartz, and Heston remain unfinished.
 
 | Module | Model | Validation and built-in limitation |
 | --- | --- | --- |
@@ -63,8 +64,10 @@ Launch the new multipage app:
 .\.venv\Scripts\python.exe -m streamlit run app/Home.py
 ```
 
-The model pages are placeholders until their calculations pass their
-validation tests. The earlier portfolio-strategy code is retained under
+The factor, regime, and Heston pages remain placeholders until their
+calculations pass validation tests. The options page includes Black-Scholes
+and binomial reference models, but not Longstaff-Schwartz yet. The earlier
+portfolio-strategy code is retained under
 `src/portfolio_research/` and documented separately in
 [`docs/portfolio-research-legacy.md`](docs/portfolio-research-legacy.md); it
 is not the new app's model implementation.
@@ -92,6 +95,30 @@ publish downloaded option-chain data.
 There is no scheduled GitHub job yet. Keeping the first snapshots local makes
 their storage and data-use terms explicit; an automated archival destination
 can be selected later if appropriate.
+
+## Stage 2: option-pricing foundations
+
+The option-pricing page compares an analytical European Black-Scholes value
+with a recombining Cox-Ross-Rubinstein binomial tree. The tree can use European
+or American exercise. Before showing the calculation, the page asks for a
+prediction. Defaults come from `config/options.yaml` and describe a synthetic
+contract; they are not current SPY market inputs.
+
+Run the learning notebook with Jupyter, or open it in VS Code:
+[`notebooks/02_option_pricing_basics.ipynb`](notebooks/02_option_pricing_basics.ipynb).
+The app page is available at **Option pricing: Black-Scholes and binomial tree**
+in the sidebar. Both pricers accept annualized rates and volatility as decimals,
+continuous dividend yield, and time to expiry on an ACT/365 basis. The binomial
+tree rejects inputs whose risk-neutral probability is outside `[0, 1]` rather
+than hiding the problem by clipping it.
+
+Saved option snapshots are read only from local disk. The loader checks the
+manifest schema, row and side counts, contract symbols, and the CSV's SHA-256
+digest before showing a sample. The digest detects accidental changes when the
+manifest is unchanged; it is not a digital signature or proof of provenance.
+Snapshot quotes may be stale or unsynchronized and are not used as calibrated
+model inputs in this stage. See [`docs/options-pricing.md`](docs/options-pricing.md)
+for formulas, assumptions, and limitations.
 
 ### Secrets and local data
 
@@ -164,7 +191,8 @@ Each model will include:
 
 ## Current scope
 
-Only the repository/app scaffolding and the option snapshot pipeline are in
-Stage 1. The factor regression, regime model, option pricers, Heston
-calibration, quizzes, and public deployment remain future work. No investment
-recommendation or claim of predictive ability is made.
+Stages 1 and 2 provide the application foundation, local option snapshots,
+and validated Black-Scholes/binomial reference pricers. The factor regression,
+regime model, Longstaff-Schwartz, Heston calibration, quizzes, and public
+deployment remain future work. No investment recommendation or claim of
+predictive ability is made.
