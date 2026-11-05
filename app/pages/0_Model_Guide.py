@@ -6,6 +6,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from scipy.stats import norm
 
+from quant_models.options.visualization import synthetic_implied_volatility_surface
+
 st.title("A beginner's guide to the models")
 st.markdown(
     """
@@ -45,15 +47,21 @@ factor_tab, regime_tab, lsm_tab, heston_tab = st.tabs(
 )
 
 with factor_tab:
-    st.header("Fama-French: explain portfolio returns with common factors")
+    st.header("Fama-French: explain returns with common factors")
     st.markdown(
         """
-        **In plain English:** instead of judging a portfolio by its return alone,
-        ask whether its returns move with broad market patterns such as the
-        market, company size, and value. The regression estimates how exposed
-        the portfolio was to each pattern.
-
-        $$R_{p,t}-R_{f,t}=\\alpha+\\beta_m(MKT-RF)_t+\\beta_s SMB_t+\\beta_h HML_t+\\epsilon_t$$
+        **In plain English:** a regression separates the returns of a collection
+        of assets into broad patterns they tend to move with, such as the market,
+        company size, and value. The fitted coefficients describe historical
+        exposure to those patterns; they are not forecasts.
+        """
+    )
+    st.latex(
+        r"R_{p,t}-R_{f,t}=\alpha+\beta_m(MKT-RF)_t+\beta_s SMB_t"
+        r"+\beta_h HML_t+\epsilon_t"
+    )
+    st.markdown(
+        """
 
         - **Inputs:** portfolio returns and factor returns on matching dates.
         - **Outputs:** factor exposures (the betas), an unexplained intercept
@@ -125,8 +133,6 @@ with regime_tab:
         Markov chain means the next state's probability depends on the current
         state, not the full earlier path.
 
-        $$P(S_t=j\\mid S_{t-1}=i)=A_{ij},\\qquad r_t\\mid S_t=k\\sim\\mathcal{N}(\\mu_k,\\sigma_k^2)$$
-
         - **Inputs:** a time-ordered return series and a chosen number of states.
         - **Outputs:** estimated state means, volatilities, transition
           probabilities, and a probability for each state at each date.
@@ -138,6 +144,17 @@ with regime_tab:
           a historical trading signal.
         - **Main trap:** state labels are mathematical labels, not economic
           truths. A fitted "high-volatility state" is not a reliable crash alarm.
+        """
+    )
+    st.latex(
+        r"P(S_t=j\mid S_{t-1}=i)=A_{ij},\qquad\,"
+        r"r_t\mid S_t=k\sim\mathcal{N}(\mu_k,\sigma_k^2)"
+    )
+    st.markdown(
+        r"""
+        Here, $A_{ij}$ is the chance of moving from state $i$ to state $j$,
+        while each hidden state $k$ has its own average return $\mu_k$ and
+        variance $\sigma_k^2$.
         """
     )
     st.markdown(
@@ -194,8 +211,6 @@ with lsm_tab:
         backwards in time. For paths where exercising now pays something, it
         estimates the value of waiting and compares the two.
 
-        $$V_t=\\max\\left(\\text{exercise value},\\;\\mathbb{E}[e^{-r\\Delta t}V_{t+\\Delta t}\\mid S_t]\\right)$$
-
         - **Inputs:** simulated underlying paths, an option payoff, rates, and
           a regression basis (a small set of simple functions used to fit a
           continuation-value curve).
@@ -205,6 +220,17 @@ with lsm_tab:
         - **Benchmark:** a European option should agree with a suitable
           analytical or tree reference; an American put can be compared with
           a fine binomial tree. Convergence is evidence, not proof.
+        """
+    )
+    st.latex(
+        r"V_t=\max\left(\text{exercise value},"
+        r"\mathbb{E}[e^{-r\Delta t}V_{t+\Delta t}\mid S_t]\right)"
+    )
+    st.markdown(
+        """
+        The expectation is the estimated average value of waiting, conditional
+        on the information available at time $t$. The algorithm exercises when
+        immediate payoff is greater than that estimated continuation value.
         """
     )
     st.markdown(
@@ -267,27 +293,38 @@ with heston_tab:
     st.header("Heston: let volatility change randomly over time")
     st.markdown(
         """
-        **In plain English:** basic option formulas often assume volatility is
-        constant. Heston lets variance itself move randomly and tend to return
-        toward a long-run level. The stock and variance shocks can be
-        correlated, which helps represent the skew seen in equity options.
-
-        $$dS_t=rS_tdt+\\sqrt{v_t}S_t dW_t^S,\\qquad
-        dv_t=\\kappa(\\theta-v_t)dt+\\xi\\sqrt{v_t}dW_t^v$$
-        $$dW_t^S dW_t^v=\\rho\\,dt$$
-
-        - **Parameters:** `v₀` initial variance, `κ` mean-reversion speed,
-          `θ` long-run variance, `ξ` volatility of variance, and `ρ` correlation.
-          In the equation, `S` is the underlying price, `v` is variance, and
-          `r` is the risk-free rate.
-        - **Output:** option prices that can be compared across strikes and
-          maturities, plus a calibrated parameter set.
-        - **Main trap:** several parameter sets may fit the same option prices;
-          optimisation can settle in local minima. A good fit today may be
-          unstable tomorrow.
-        - **Checks:** use multiple starting guesses, compare prices with a
-          Black-Scholes limiting case, and track parameter stability.
+        **In plain English:** Black-Scholes assumes one fixed volatility.
+        Heston instead models variance as a second random process: it wanders,
+        but is pulled toward a long-run average. This can create different
+        option prices at different strikes and maturities.
         """
+    )
+    st.latex(
+        r"\frac{dS_t}{S_t}=(r-q)\,dt+\sqrt{v_t}\,dW_t^S"
+        r",\qquad dv_t=\kappa(\theta-v_t)\,dt"
+        r"+\xi\sqrt{v_t}\,dW_t^v"
+    )
+    st.latex(r"dW_t^S\,dW_t^v=\rho\,dt")
+    st.markdown(
+        r"""
+        Here the stock price $S_t$ moves with instantaneous volatility
+        $\sqrt{v_t}$. The variance $v_t$ changes randomly and tends toward
+        $\theta$. The Brownian shocks $dW_t^S$ and $dW_t^v$ are correlated.
+
+        - `r` is the risk-free rate and `q` is the continuous dividend yield.
+          These specify the risk-neutral stock-price drift used for pricing.
+        - `v₀` is starting variance; $\sqrt{v_0}$ is starting volatility.
+        - `κ` controls how quickly variance is pulled toward the long-run level
+          `θ`; larger `κ` means faster mean reversion.
+        - `ξ` controls how noisy variance is. Larger `ξ` can create more
+          variation in future volatility.
+        - `ρ` is the correlation between stock and variance shocks. Negative
+          values can create a downward implied-volatility skew.
+        """
+    )
+    st.info(
+        "This page explains the model but does not yet price options with Heston "
+        "or calibrate parameters to market data. The graph below is synthetic."
     )
     st.markdown(
         """
@@ -336,57 +373,50 @@ with heston_tab:
         st.markdown(
             """
             **3D surface intuition:** implied volatility is often visualized
-            across option strike (here represented by log-moneyness) and time
-            to maturity. A skew or smile shows how option prices vary across
-            strikes; curvature across maturity shows term structure.
+            across option strike and time to maturity. Implied volatility is
+            not Heston's direct output: an option-pricing model first produces
+            option prices, which can then be translated into Black-Scholes
+            implied volatilities for display.
 
             The surface below is generated from a simple illustrative equation,
-            **not** from Heston pricing, market option quotes, or a calibration.
-            Heston implementation and calibration remain future work.
-
-            For this example, the plotted volatility is
-            $22\\%-12\\%k e^{-T/1.5}+18\\%k^2+2.5\\%e^{-T/0.75}$, where
-            $k=\\log(K/S)$ and $T$ is maturity in years. These coefficients
-            are invented to create a visible skew and maturity shape.
+            not from Heston pricing or market option quotes. The invented
+            coefficients are there only to make the shape easy to explore.
             """
         )
-        st.markdown("#### Synthetic 3D volatility surface")
-        log_moneyness = np.linspace(-0.4, 0.4, 25)
-        maturities = np.linspace(0.1, 2.0, 16)
-        moneyness_grid, maturity_grid = np.meshgrid(log_moneyness, maturities)
-        volatility_surface = 100 * (
-            0.22
-            - 0.12 * moneyness_grid * np.exp(-maturity_grid / 1.5)
-            + 0.18 * moneyness_grid**2
-            + 0.025 * np.exp(-maturity_grid / 0.75)
+        st.latex(
+            r"\sigma_{\mathrm{illustrative}}(k,T)="
+            r"0.22-a k e^{-T/1.5}+b k^2"
+            r"+0.025e^{-T/0.75}"
         )
-        surface_figure = go.Figure(
-            go.Surface(
-                x=moneyness_grid,
-                y=maturity_grid,
-                z=volatility_surface,
-                colorscale="Viridis",
-                colorbar={"title": "Implied volatility (%)"},
-                hovertemplate=(
-                    "Log-moneyness: %{x:.2f}<br>"
-                    "Maturity: %{y:.2f} years<br>"
-                    "Illustrative volatility: %{z:.1f}%<extra></extra>"
-                ),
-            )
+        st.markdown(
+            """
+            `k = log(K / S)` is log-moneyness: zero is at-the-money,
+            negative values are lower strikes, and positive values are higher
+            strikes. `T` is time to maturity in years. Adjust the invented
+            skew and curvature below; these controls do not change Heston
+            parameters or price an option.
+            """
         )
-        surface_figure.update_layout(
-            scene={
-                "xaxis_title": "log(K / S)",
-                "yaxis_title": "Maturity (years)",
-                "zaxis_title": "Implied volatility (%)",
-                "camera": {"eye": {"x": 1.5, "y": 1.7, "z": 1.25}},
-            },
-            height=560,
-            margin={"l": 15, "r": 15, "t": 10, "b": 40},
-            template="plotly_white",
+        skew = st.slider(
+            "Illustration: skew strength",
+            min_value=0,
+            max_value=30,
+            value=12,
+            help="Changes the synthetic surface shape only; it is not calibrated.",
         )
+        curvature = st.slider(
+            "Illustration: smile curvature",
+            min_value=0,
+            max_value=50,
+            value=18,
+            help="Changes the synthetic surface shape only; it is not calibrated.",
+        )
+        st.markdown("#### Synthetic 3D implied-volatility surface")
         st.plotly_chart(
-            surface_figure,
+            synthetic_implied_volatility_surface(
+                skew_strength=skew / 100,
+                smile_curvature=curvature / 100,
+            ),
             width="stretch",
             alt=(
                 "Synthetic three-dimensional implied-volatility surface across "
@@ -395,8 +425,34 @@ with heston_tab:
         )
         st.caption(
             "Rotate the graph to compare the strike skew and maturity shape. "
-            "Every value is synthetic and included only to explain the chart form."
+            "Every value is synthetic and included only to explain the chart form. "
+            "The surface is not guaranteed to be arbitrage-free."
         )
+        st.subheader("What calibration would mean")
+        st.markdown(
+            """
+            Calibration would choose values for $(v_0,\\kappa,\\theta,\\xi,\\rho)$
+            so model prices are close to observed option prices. A careful study
+            would first validate quotes and units, then price a range of strikes
+            and expiries, minimize a documented pricing-error measure, try
+            multiple starting points, and compare stability on later dates.
+            """
+        )
+        st.warning(
+            "A small calibration error would not prove the model is true: noisy "
+            "quotes, correlated parameters, and an optimizer's local minimum can "
+            "all produce misleadingly convincing fits."
+        )
+        with st.expander("Optional numerical note: the Feller condition"):
+            st.markdown(
+                """
+                The condition $2\\kappa\\theta\\geq\\xi^2$ is often called the
+                Feller condition. In the continuous-time variance process, it
+                ensures zero is unattainable when variance starts positive.
+                It is not a blanket test for whether a fitted Heston model is
+                valid, and numerical simulation still needs a suitable scheme.
+                """
+            )
 
 st.divider()
 st.subheader("A quick comparison")
@@ -405,7 +461,7 @@ st.table(
         [
             {
                 "Model": "Fama-French",
-                "Main question": "What common return factors explain a portfolio?",
+                "Main question": "Which broad return factors move with an asset or portfolio?",
                 "Current app status": "Implemented: FF3 and FF5",
             },
             {
@@ -421,7 +477,7 @@ st.table(
             {
                 "Model": "Heston",
                 "Main question": "Can random, mean-reverting volatility explain option prices?",
-                "Current app status": "Explained; implementation is planned",
+                "Current app status": "Beginner walkthrough; pricing/calibration planned",
             },
         ]
     ),

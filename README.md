@@ -1,31 +1,35 @@
 # Quant Models Explained
 
-**A self-directed academic project** building four quantitative-finance models
-from first principles, validating them against known results, and explaining
-how they can mislead. This is a learning project—not investment advice, live
-trading, real-money performance, or professional client work.
+**A self-directed academic learning project** explaining quantitative-finance
+models, implementing selected calculations, and showing how assumptions and
+validation affect their results. It is an educational model-learning app, not
+a portfolio recommendation or trading system.
 
 > Anyone can build a model that looks good. This project is designed to show
 > when it isn't.
 
 ## Current milestone
 
-The project has changed direction from the earlier portfolio-strategy
-playground. Stage 1 established the package, pinned environment, Streamlit
+The project is now focused on learning how quantitative models work, how their
+mathematics is implemented, and how to question their outputs. Market and
+factor data are examples for studying models, not inputs to a portfolio
+recommendation or live trading tool. Stage 1 established the package, pinned
+environment, Streamlit
 scaffold, secrets checks, and a local SPY option-chain snapshot tool. Stage 2
 adds validated local snapshot loading plus tested Black-Scholes and
 Cox-Ross-Rubinstein reference pricers. Stage 3 adds the FF3/FF5 monthly
 regression, validated data alignment, and Newey-West inference. Stage 4 adds a
-beginner's guide to all four models and a Gaussian hidden-Markov regime
-experiment with chronological filtering. Longstaff-Schwartz and Heston remain
-explained roadmap items, not implemented models.
+beginner's guide to all four models, a Gaussian hidden-Markov regime
+experiment with chronological filtering, and an educational Heston
+walkthrough. Longstaff-Schwartz and Heston option pricing/calibration remain
+unimplemented.
 
 | Module | Model | Validation and built-in limitation |
 | --- | --- | --- |
 | 1 | Fama-French factor regressions | Align factor data and returns, convert percent units, handle missing-code sentinels, use Newey-West errors, and test whether alpha differs from zero. The trap: alpha is not evidence of skill unless uncertainty is considered. |
 | 2 | Regime switching | Fit a Gaussian HMM on an early sample, filter later returns chronologically, and keep smoothed probabilities visibly separate. The trap: smoothed probabilities use future data. |
 | 3 | Longstaff-Schwartz American options | Compare with Black-Scholes for European options and a binomial benchmark for American puts. The trap: a fitted exercise rule can underprice. |
-| 4 | Heston stochastic-volatility calibration | Validate a Black-Scholes limiting case, use multiple starts, and track parameter stability across saved option snapshots. The trap: different parameter sets may fit similarly and optimisation may find local minima. |
+| 4 | Heston stochastic-volatility model | Beginner's equation walkthrough and synthetic 3D surface are implemented. Heston pricing and calibration are not. The trap: fitted parameters may be unstable or non-unique. |
 
 The intended first public version is modules 1–2, the learning app, and a
 carefully limited write-up by early January 2027. The full project target is
@@ -170,9 +174,10 @@ experiment in
 
 Use **A beginner's guide to the models** in the sidebar for plain-English
 explanations and diagrams of Fama-French, regime switching, Longstaff-Schwartz,
-and Heston. Every diagram uses schematic or synthetic values and is labeled
-accordingly; explaining a future model does not mean that model has already
-been implemented.
+and Heston. The separate Heston page walks through its stochastic differential
+equations and lets you explore an explicitly synthetic volatility surface.
+Every illustrative graph is labeled; explaining a model does not mean its
+pricing or calibration has been implemented.
 
 ### Secrets and local data
 
@@ -248,6 +253,6 @@ Each model will include:
 Stages 1–4 provide the application foundation, local option snapshots,
 Black-Scholes/binomial reference pricers, tested FF3/FF5 regressions, a
 chronological Gaussian HMM experiment, and a beginner guide to all four models.
-Longstaff-Schwartz, Heston calibration, quizzes, and public deployment remain
-future work. No investment recommendation or claim of predictive ability is
-made.
+Longstaff-Schwartz pricing, Heston pricing/calibration, quizzes, and public
+deployment remain future work. The app is for learning model concepts, not
+investment recommendations or claims of predictive ability.

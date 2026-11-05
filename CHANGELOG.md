@@ -13,6 +13,7 @@ Notable project changes are recorded here.
 - Added a beginner model guide with explicitly synthetic diagrams and plain-English coverage of all four planned models.
 - Added a Gaussian hidden-Markov regime experiment with chronological training/filtered probabilities, isolated smoothed probabilities, charts, tests, and a learning notebook.
 - Made guide charts render only for the selected model, cached repeated market-data loads and HMM fits, and added a clearly synthetic 3D volatility-surface teaching graph.
+- Fixed model-guide equation rendering, expanded the beginner explanations, and replaced the empty Heston placeholder with an interactive educational walkthrough; clarified the app's model-learning focus.
 
 ## [Archived] - Portfolio Research Lab direction
 
