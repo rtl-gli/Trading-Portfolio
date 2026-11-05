@@ -1,0 +1,7 @@
+symbol: SPY
+start_date: "2000-01-01"
+train_fraction: 0.70
+n_states: 2
+n_restarts: 5
+max_iterations: 200
+random_seed: 42

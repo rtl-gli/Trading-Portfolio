@@ -9,10 +9,9 @@ st.caption(
     "first principles, validated honestly, and taught to a beginner."
 )
 st.info(
-    "The factor-regression page now includes FF3/FF5 estimates with "
-    "Newey-West inference, and the option-pricing page includes tested "
-    "Black-Scholes/binomial references. Regime switching, Longstaff-Schwartz, "
-    "and Heston calibration remain unfinished."
+    "Explore the beginner's model guide, FF3/FF5 regression, a chronological "
+    "Gaussian hidden-Markov regime experiment, and Black-Scholes/binomial "
+    "option-pricing references. Longstaff-Schwartz and Heston remain planned."
 )
 st.markdown(
     """

@@ -15,13 +15,15 @@ playground. Stage 1 established the package, pinned environment, Streamlit
 scaffold, secrets checks, and a local SPY option-chain snapshot tool. Stage 2
 adds validated local snapshot loading plus tested Black-Scholes and
 Cox-Ross-Rubinstein reference pricers. Stage 3 adds the FF3/FF5 monthly
-regression, validated data alignment, and Newey-West inference. Regime
-switching, Longstaff-Schwartz, and Heston remain unfinished.
+regression, validated data alignment, and Newey-West inference. Stage 4 adds a
+beginner's guide to all four models and a Gaussian hidden-Markov regime
+experiment with chronological filtering. Longstaff-Schwartz and Heston remain
+explained roadmap items, not implemented models.
 
 | Module | Model | Validation and built-in limitation |
 | --- | --- | --- |
 | 1 | Fama-French factor regressions | Align factor data and returns, convert percent units, handle missing-code sentinels, use Newey-West errors, and test whether alpha differs from zero. The trap: alpha is not evidence of skill unless uncertainty is considered. |
-| 2 | Regime switching | Implement and test filtered probabilities, compare with a trusted implementation, and keep smoothed probabilities visibly separate. The trap: smoothed probabilities use future observations. |
+| 2 | Regime switching | Fit a Gaussian HMM on an early sample, filter later returns chronologically, and keep smoothed probabilities visibly separate. The trap: smoothed probabilities use future data. |
 | 3 | Longstaff-Schwartz American options | Compare with Black-Scholes for European options and a binomial benchmark for American puts. The trap: a fitted exercise rule can underprice. |
 | 4 | Heston stochastic-volatility calibration | Validate a Black-Scholes limiting case, use multiple starts, and track parameter stability across saved option snapshots. The trap: different parameter sets may fit similarly and optimisation may find local minima. |
 
@@ -65,9 +67,16 @@ Launch the new multipage app:
 .\.venv\Scripts\python.exe -m streamlit run app/Home.py
 ```
 
-The factor page includes tested FF3/FF5 regression calculations; the regime
-and Heston pages remain placeholders. The options page includes Black-Scholes
-and binomial reference models, but not Longstaff-Schwartz yet. The earlier
+The beginner guide explains all four models, and its diagrams are explicitly
+illustrative rather than estimates. The regime page fits a Gaussian HMM to
+adjusted daily log returns: it estimates parameters on an early chronological
+training sample, then freezes those parameters and filters later returns
+sequentially. A separate teaching-only view displays smoothed probabilities,
+which use future observations. This is not a walk-forward trading strategy or
+a crash predictor. The factor page includes tested FF3/FF5 regression
+calculations. The options page includes Black-Scholes and binomial reference
+models, but not Longstaff-Schwartz yet; Heston calibration is also unfinished.
+The earlier
 portfolio-strategy code is retained under
 `src/portfolio_research/` and documented separately in
 [`docs/portfolio-research-legacy.md`](docs/portfolio-research-legacy.md); it
@@ -145,6 +154,26 @@ date in `config/factors.yaml`. This fixed, present-day stock universe is
 survivorship-biased, and its monthly rebalanced returns are gross of costs;
 they are explanatory inputs, not an investable backtest.
 
+## Stage 4: regime switching
+
+The regime page starts with SPY and allows QQQ, TLT, or GLD. It fits 2–4
+Gaussian return states on an early chronological sample using multiple
+deterministic EM initialisations. State volatility, transition probabilities,
+and filtered probabilities are graphed, with the training cutoff shown on the
+price chart. Filtered probabilities only use observations through their date;
+the separately labeled smoothed view uses future data and must not be used as
+a historical signal. The fit is not retrained walk-forward and does not
+constitute a trading rule. See
+[`docs/regime-switching.md`](docs/regime-switching.md) and run the synthetic
+experiment in
+[`notebooks/regime_switching_basics.ipynb`](notebooks/regime_switching_basics.ipynb).
+
+Use **A beginner's guide to the models** in the sidebar for plain-English
+explanations and diagrams of Fama-French, regime switching, Longstaff-Schwartz,
+and Heston. Every diagram uses schematic or synthetic values and is labeled
+accordingly; explaining a future model does not mean that model has already
+been implemented.
+
 ### Secrets and local data
 
 `.env` is ignored by Git; `.env.example` contains no credentials.
@@ -216,8 +245,9 @@ Each model will include:
 
 ## Current scope
 
-Stages 1–3 provide the application foundation, local option snapshots,
-Black-Scholes/binomial reference pricers, and tested FF3/FF5 regressions.
-Regime switching, Longstaff-Schwartz, Heston calibration, quizzes, and public
-deployment remain future work. No investment recommendation or claim of
-predictive ability is made.
+Stages 1–4 provide the application foundation, local option snapshots,
+Black-Scholes/binomial reference pricers, tested FF3/FF5 regressions, a
+chronological Gaussian HMM experiment, and a beginner guide to all four models.
+Longstaff-Schwartz, Heston calibration, quizzes, and public deployment remain
+future work. No investment recommendation or claim of predictive ability is
+made.
