@@ -3,7 +3,7 @@ setuptools==84.2.1
 wheel==0.48.0
 hmmlearn==0.3.3
 matplotlib==3.11.2
-numpy==2.5.4
+numpy==2.4.6
 pandas==2.3.3
 plotly==7.1.0
 python-dotenv==1.2.4
