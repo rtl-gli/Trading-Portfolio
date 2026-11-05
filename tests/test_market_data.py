@@ -24,6 +24,19 @@ def test_configured_universe_has_30_stocks_and_four_etfs() -> None:
     assert len(universe.symbols) == 34
     assert {"SPY", "QQQ", "TLT", "GLD"} == set(universe.etfs)
     assert len(universe.symbols) == len(set(universe.symbols))
+    assert universe.stocks_by_sector == {
+        "Information Technology": ("AAPL", "MSFT", "NVDA"),
+        "Health Care": ("JNJ", "UNH", "LLY"),
+        "Financials": ("JPM", "BRK-B", "GS"),
+        "Consumer Discretionary": ("AMZN", "HD", "MCD"),
+        "Communication Services": ("GOOGL", "META", "DIS"),
+        "Industrials": ("CAT", "HON", "UPS"),
+        "Consumer Staples": ("PG", "KO", "WMT"),
+        "Energy": ("XOM", "CVX", "COP"),
+        "Utilities": ("NEE", "DUK"),
+        "Real Estate": ("PLD", "AMT"),
+        "Materials": ("LIN", "SHW"),
+    }
 
 
 def test_validate_symbols_normalizes_and_rejects_duplicates() -> None:

@@ -28,10 +28,17 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install project and development dependencies
+      - name: Install pinned dependencies and project
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          python -m pip install -r requirements.txt
+          python -m pip install --no-deps -e .
+
+      - name: Run pre-commit checks
+        run: pre-commit run --all-files
+
+      - name: Ensure hooks made no changes
+        run: git diff --exit-code
 
       - name: Check formatting
         run: python -m ruff format --check .
@@ -41,3 +48,6 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
+
+      - name: Audit dependencies
+        run: pip-audit -r requirements.txt

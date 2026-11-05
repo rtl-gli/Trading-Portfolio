@@ -1,0 +1,4 @@
+provider: yfinance
+underlying: SPY
+timezone: America/New_York
+snapshot_directory: data/options/snapshots

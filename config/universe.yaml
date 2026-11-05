@@ -6,36 +6,36 @@ stocks_by_sector:
     - MSFT
     - NVDA
   Health Care:
-    - LLY
     - JNJ
-    - ABBV
+    - UNH
+    - LLY
   Financials:
     - JPM
     - BRK-B
     - GS
   Consumer Discretionary:
     - AMZN
-    - TSLA
+    - HD
     - MCD
   Communication Services:
     - GOOGL
     - META
-    - NFLX
+    - DIS
   Industrials:
     - CAT
-    - GE
     - HON
+    - UPS
   Consumer Staples:
-    - WMT
-    - COST
     - PG
+    - KO
+    - WMT
   Energy:
     - XOM
     - CVX
     - COP
   Utilities:
     - NEE
-    - SO
+    - DUK
   Real Estate:
     - PLD
     - AMT

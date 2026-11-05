@@ -1,245 +1,170 @@
-# Portfolio Research Lab
+# Quant Models Explained
 
-**A self-directed academic project** for learning how to test portfolio
-strategies rigorously—not a live-trading system or investment advice.
+**A self-directed academic project** building four quantitative-finance models
+from first principles, validating them against known results, and explaining
+how they can mislead. This is a learning project—not investment advice, live
+trading, real-money performance, or professional client work.
 
-> Anyone can build a strategy that looks good. This project is designed to
-> find out when it isn't.
+> Anyone can build a model that looks good. This project is designed to show
+> when it isn't.
 
-## Research principles
+## Current milestone
 
-- Compare strategies with explicit transaction-cost and slippage assumptions.
-- Keep signals and portfolio weights from using information that was not
-  available at the time.
-- Use out-of-sample or walk-forward evaluation; treat in-sample results as
-  exploratory, not evidence of future performance.
-- Record failed approaches and limitations as carefully as successful tests.
-- Keep configuration and secrets out of source code. The planned initial
-  market-data source, `yfinance`, does not require an API key.
-- Treat the planned fixed list of today's large US companies as survivorship-
-  biased: companies that failed, shrank, or left the market are not represented.
+The project has changed direction from the earlier portfolio-strategy
+playground. This first setup milestone establishes the package, pinned
+environment, Streamlit page skeleton, secrets checks, and a local SPY option
+chain snapshot tool. The models below are planned; no estimates or prices are
+presented until their implementations and validation tests exist.
 
-## Planned research scope
+| Module | Model | Validation and built-in limitation |
+| --- | --- | --- |
+| 1 | Fama-French factor regressions | Align factor data and returns, convert percent units, handle missing-code sentinels, use Newey-West errors, and test whether alpha differs from zero. The trap: alpha is not evidence of skill unless uncertainty is considered. |
+| 2 | Regime switching | Implement and test filtered probabilities, compare with a trusted implementation, and keep smoothed probabilities visibly separate. The trap: smoothed probabilities use future observations. |
+| 3 | Longstaff-Schwartz American options | Compare with Black-Scholes for European options and a binomial benchmark for American puts. The trap: a fitted exercise rule can underprice. |
+| 4 | Heston stochastic-volatility calibration | Validate a Black-Scholes limiting case, use multiple starts, and track parameter stability across saved option snapshots. The trap: different parameter sets may fit similarly and optimisation may find local minima. |
 
-The platform covers approximately 30 large-cap US stocks across all 11 sectors,
-plus SPY, QQQ, TLT, and GLD. Implemented comparisons include SMA crossover,
-momentum, mean reversion, mean-variance optimisation, an equal-weight ETF
-basket, and buy-and-hold.
+The intended first public version is modules 1–2, the learning app, and a
+carefully limited write-up by early January 2027. The full project target is
+31 March 2027. These are targets, not claims that unfinished modules exist.
 
-Evaluation includes CAGR, Sharpe ratio, maximum drawdown, volatility, VaR, and
-beta versus SPY. A free historical-data source can revise or omit observations;
-locally cached data is not automatically point-in-time or survivorship-bias-free.
+## Stage 1: setup and option snapshot
 
-## Build roadmap
+### Windows / PowerShell setup
 
-1. Repository setup, environment, folder structure, and secrets handling
-   (**complete**)
-2. Validated market-data ingestion and local caching (**complete**)
-3. Notebook-first, cost-aware SMA backtest versus buy-and-hold (**complete**)
-4. Tested performance and risk metrics (**complete**)
-5. Streamlit strategy playground and learning mode (**complete**)
-6. Additional strategies and out-of-sample testing (**complete**)
-7. Bias lab, predict-then-run, and quiz (**complete**)
-8. Paper-trading simulator and trade journal (**complete**)
-9. Audit logging, input validation, and threat model (**complete**)
-10. Results, limitations, and project write-up (**complete; one exploratory run documented**)
-
-Each stage is intended to add a small learning notebook before the corresponding
-production module. Features are described as planned until implemented and
-tested.
-
-## Local setup (PowerShell)
-
-Requires Python 3.11 or newer.
+Use Python 3.11 or newer. From the project folder in the VS Code terminal:
 
 ```powershell
-# Open the project folder in VS Code and run these in its integrated PowerShell terminal.
 python --version
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install --no-deps -e .
+.\.venv\Scripts\python.exe -m pre_commit install
 ```
 
-Using the virtual environment's interpreter directly avoids PowerShell
-activation-policy issues and ensures each command uses the project's
-dependencies. Run the automated tests and lint check with:
+`requirements.txt` pins runtime and development tools. `pre-commit` checks
+formatting, YAML, and potential secrets before each commit. If you add a new
+secret type or intentionally change a scanner finding, review the baseline
+deliberately—never use it to hide a real credential.
+
+Run local quality checks:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m pre_commit run --all-files
+.\.venv\Scripts\pip-audit.exe -r requirements.txt
 ```
 
-GitHub Actions runs formatting, lint, and the complete test suite on Python
-3.11 and 3.13 for pushes to `main`, pull requests, and manual workflow runs.
-
-Launch the dashboard from the repository root:
+Launch the new multipage app:
 
 ```powershell
-.\.venv\Scripts\python.exe -m streamlit run streamlit_app.py
+.\.venv\Scripts\python.exe -m streamlit run app/Home.py
 ```
 
-The first run needs internet access for yfinance; matching later requests use
-the local cache. Stop the dashboard with `Ctrl+C`.
+The model pages are placeholders until their calculations pass their
+validation tests. The earlier portfolio-strategy code is retained under
+`src/portfolio_research/` and documented separately in
+[`docs/portfolio-research-legacy.md`](docs/portfolio-research-legacy.md); it
+is not the new app's model implementation.
+
+### Daily SPY option-chain snapshot
+
+The script requests every expiration currently listed by yfinance, validates
+the quote fields, and writes one compressed CSV plus a JSON manifest for the
+New York calendar date:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\snapshot_spy_options.py
+```
+
+Configuration is in `config/options.yaml`. Each successful run is stored under
+`data/options/snapshots/YYYY-MM-DD/`; the manifest records retrieval time in
+UTC, the listed expirations, call/put counts, and the CSV's SHA-256 digest.
+Snapshots are local and excluded from Git. The script refuses to overwrite an
+existing date's snapshot; inspect any existing file before removing or moving
+it. The provider may revise, delay, omit, or rate-limit data, and the snapshot
+is not guaranteed to be an exchange-timestamped or complete market record.
+This project uses yfinance for personal and educational research; do not
+publish downloaded option-chain data.
+
+There is no scheduled GitHub job yet. Keeping the first snapshots local makes
+their storage and data-use terms explicit; an automated archival destination
+can be selected later if appropriate.
+
+### Secrets and local data
+
+`.env` is ignored by Git; `.env.example` contains no credentials.
+The current yfinance workflow needs no API key. Never put keys in code,
+configuration, tests, logs, notebooks, or a public issue. Downloaded option
+chains, caches, audit logs, and local generated outputs are excluded from Git.
+See [`docs/threat-model.md`](docs/threat-model.md).
+
+## Intended data and assumptions
+
+- **Factor portfolio:** 30 present-day large-cap US stocks across 11 sectors,
+  equal-weighted by default, with user-adjustable weights. The exact list is in
+  `config/universe.yaml`. Because it is chosen today, it has survivorship bias;
+  it does not include firms that failed, were acquired, or left the market.
+- **Factor benchmarks:** SPY, QQQ, TLT, and GLD.
+- **Factor sample:** begins 2013-01-01 (META listed in 2012) and ends at the
+  latest available Fama-French publication date.
+- **Regime sample:** SPY from 2000 onward, subject to validated data coverage.
+- **Option underlying:** SPY. For option pricing, use a clearly dated
+  risk-free-rate assumption and a documented SPY dividend yield; do not
+  silently substitute a current rate for a historical one.
+- **Fama-French risk-free rate:** use the factor library's RF series and align
+  it exactly to portfolio-return dates.
+
+`yfinance` prices and option quotes can be missing, revised, delayed, or
+adjusted. The project will report coverage and fail clearly rather than
+silently filling missing prices or claiming point-in-time data. The fixed
+present-day stock universe and provider history remain research limitations.
 
 ## Repository layout
 
 ```text
-config/                  Version-controlled, non-secret project settings
-data/                    Local market data (ignored by Git)
-docs/                    Research and security documentation
-notebooks/               Stage-by-stage learning experiments
-src/portfolio_research/  Importable Python package
-tests/                   Automated tests
+app/                         Streamlit home and one page per model
+config/                      Non-secret YAML settings and fixed universe
+data/options/snapshots/       Local-only downloaded option chains (Git-ignored)
+docs/                        Threat model, sources, maths, and honesty notes
+notebooks/                   Concept experiments, one per module
+scripts/                     Reproducible data and research commands
+src/quant_models/data/        Validated data loading and snapshots
+src/quant_models/factors/     Fama-French model
+src/quant_models/regimes/     Hidden-state model and probability filters
+src/quant_models/options/     Black-Scholes, binomial, LSM, and Heston
+src/quant_models/metrics/     Shared validated metrics
+tests/                       Numerical, input-validation, and app tests
 ```
 
-## Secrets and local data
+`src/portfolio_research/` is retained from the previous project direction
+during migration; new work belongs in `src/quant_models/`.
 
-Do not commit API keys, passwords, account details, or private data. `.env`,
-Streamlit's local `secrets.toml`, private key files, downloaded market data,
-logs, and generated outputs are excluded by `.gitignore`. The checked-in
-`.env.example` is documentation only and contains no credentials.
+## Quality and release checks
 
-The initial data provider is planned to be keyless. If another provider is
-introduced, its credentials should be supplied through environment variables
-or an ignored local secrets file; the project must never print or audit-log
-secret values.
+GitHub Actions runs tests and code-quality checks on Python 3.11 and 3.13.
+Before a release, run the dependency vulnerability audit and secret scan. Do
+not commit downloaded raw market data. Any published derived results must
+include their data source, retrieval date, assumptions, validation, and
+limitations.
 
-## Stage 2: market data
+## Learning template
 
-The fixed universe is in `config/universe.yaml`: 30 present-day US stocks
-labelled across all 11 sectors, plus SPY, QQQ, TLT, and GLD. Load the list and
-request adjusted daily prices with `portfolio_research.config.load_universe`
-and `portfolio_research.market_data.load_prices`. The end date is exclusive,
-matching yfinance's convention.
+Each model will include:
 
-The pipeline validates symbols, date order, duplicate daily bars, numeric and
-positive prices, infinite values, and requested ticker coverage. It reports
-missing observations per symbol and does **not** fill or discard them. Results
-are cached as compressed CSV files under `data/cache/` (ignored by Git).
-Fresh cache entries are reused; offline mode can return an expired entry, but
-labels it `stale_cache`. The configured cache lifetime is in
-`config/project.yaml`.
+1. Plain-English intuition and an analogy.
+2. A maths box defining symbols, assumptions, and the original paper.
+3. A typed, documented, tested implementation and a notebook experiment.
+4. An interactive page that changes model inputs.
+5. A working demonstration of how the model can mislead.
+6. Quiz questions, glossary terms, and a note on what the author understands
+   and does not yet understand.
 
-`yfinance` is a convenient, free research source, not a point-in-time or
-institutional data feed. `auto_adjust=True` supplies adjusted prices, but
-adjustments and historical records can change; delisted companies and past
-index constituents are not restored by this present-day universe. Cache
-timestamps identify when data was retrieved locally, not whether the provider's
-history is immutable or survivorship-bias-free.
+## Current scope
 
-## Stages 3–4: SMA backtest and analytics
-
-The first experiment compares one configured, long-only SMA crossover on
-adjusted daily closes with buy-and-hold. Fast/slow windows, per-side transaction
-cost, per-side slippage, and execution delay live in `config/strategies.yaml`;
-metric conventions live under `analytics` in `config/project.yaml`.
-
-An SMA signal uses the closing price at its signal date. The backtest waits for
-the configured execution delay to fill the signal at a later close, then waits
-until the next return interval before crediting market performance. This avoids
-earning a return from before the assumed fill. Costs apply on signal-driven
-trades and final liquidation; buy-and-hold also pays entry and liquidation
-costs. Missing prices fail the backtest instead of being filled. The notebook
-in `notebooks/03_sma_backtest.ipynb` walks through the experiment.
-
-Tested metrics include CAGR, annualised Sharpe ratio, maximum drawdown,
-annualised volatility, historical VaR, and beta versus the explicitly supplied
-benchmark. Undefined Sharpe/beta values come with warnings. Metric conventions
-and synthetic-return experiments are in `notebooks/04_performance_metrics.ipynb`.
-Annualisation assumes the configured 252 periods per year; historical VaR is a
-sample quantile, not a forecast. One SMA setting on SPY is a demonstration,
-not evidence of an edge or out-of-sample validation.
-
-## Stage 5: Streamlit playground
-
-The sidebar lets you choose a strategy, asset or ETF portfolio, date range,
-signal parameters, transaction costs, and slippage. Streamlit reruns the
-research when an input changes; the local data cache prevents unnecessary
-repeat downloads. Learning mode is enabled by default and provides
-plain-English explanations, caveats, and a short glossary beside the results.
-The dashboard reports data source, retrieval time, missing observations, and
-any leading sessions excluded before the selected assets overlap.
-
-Interactive controls make runs easier to inspect, but do not prove a strategy
-is robust. The held-out period is deliberately short enough to make sample-size
-limitations visible.
-
-## Stage 6: momentum, mean reversion, and Markowitz
-
-The playground now also compares long/flat momentum and mean-reversion rules.
-Their lookbacks and thresholds are configured in `config/strategies.yaml`.
-Parameters are held fixed rather than searched against the evaluation period.
-The dashboard reserves the initial 70% of selected dates as signal warm-up or
-estimation history and reports performance only over the final 30%, starting
-the simulated portfolio in cash and charging entry and exit costs.
-
-The Markowitz option uses a selected basket of the four configured ETFs. It
-estimates expected daily returns and covariance from a rolling historical
-window, rebalances at the configured interval, enforces long-only weights and
-a maximum position, and passes weights through the same execution delay and
-cost model. It is compared with both SPY buy-and-hold and a periodically
-rebalanced equal-weight portfolio built from the same selected ETFs, with the
-same execution delay, costs, and terminal liquidation. The SciPy optimiser is
-used only on past observations available at each rebalance; estimation error
-and optimizer sensitivity remain serious limitations. A future increase in
-the asset universe can make the maximum weight infeasible; in that case, the
-optimizer fails explicitly rather than silently changing the limit.
-
-This is a single holdout, not nested walk-forward model selection. The fixed
-signal thresholds have not been tuned, and changing them after seeing holdout
-results would consume that holdout. The multi-strategy learning experiment is
-in `notebooks/06_walk_forward_strategies.ipynb`.
-
-## Stage 7: bias lab, predictions, and quizzes
-
-Before running the backtest, record whether you expect the selected strategy to
-beat its benchmark and your estimated maximum drawdown. The dashboard compares
-those predictions with the held-out result; changing a research input requires
-a new prediction.
-
-The bias lab can deliberately remove costs, use a signal or portfolio target
-from the end of a return interval to select exposure for that same interval,
-or select SMA parameters using the full sample. These variants are explicitly
-labelled invalid and are never reported as honest out-of-sample results. The
-overfit demo reports the best full-sample setting on the same observations used
-to choose it. The quiz tests concepts covered in the code.
-See `notebooks/07_bias_lab.ipynb`.
-
-## Stage 8: paper trading and trade journal
-
-The optional simulator stores a local virtual account in
-`data/paper_trading.sqlite3` (ignored by Git). It sends no orders and does not
-connect to a brokerage. You manually enter a reference price; each simulated
-trade requires a written rationale first and deducts the dashboard's current
-transaction-cost and slippage assumptions. Cash limits, share availability,
-ticker syntax, and numeric inputs are checked. Add a later review to each
-trade. The initial account balance is configured in
-`config/project.yaml`. See `notebooks/08_paper_trading_journal.ipynb`.
-
-## Stage 9: validation, audit log, and threat model
-
-Each evaluated daily signal is recorded with its run ID, date, target signal,
-and available position. Paper-trade attempts and post-trade reviews are also
-logged. The local `data/audit.jsonl` uses a SHA-256 hash chain; each append
-checks the existing chain before writing. The log avoids copying free-text
-trade rationales and reviews, retaining only their hashes.
-
-The audit is tamper-evident, not tamper-proof: anyone able to rewrite the local
-file can recalculate hashes or delete it. The log is not encrypted, signed,
-remotely backed up, or a regulated record. Protect the device and keep the
-SQLite journal and generated log out of Git. Read
-[`docs/threat-model.md`](docs/threat-model.md) before extending data sources,
-sharing the dashboard, or adding credentials or any brokerage connection.
-The audit-log lesson is in `notebooks/09_audit_log.ipynb`.
-
-## Status and intended use
-
-Stages 1–10 are complete as a research platform and methods write-up. The
-report contains one explicitly limited historical SPY holdout example; it does
-not claim a strategy edge or future performance. Data downloads happen only
-when the caller invokes the pipeline or opens the dashboard; the repository
-does not place real trades. Everything built here is for education and paper
-research, not financial advice or a claim of live or professional performance.
-Read
-[`docs/research-writeup.md`](docs/research-writeup.md) for the research question,
-method, reporting template, and next steps.
+Only the repository/app scaffolding and the option snapshot pipeline are in
+Stage 1. The factor regression, regime model, option pricers, Heston
+calibration, quizzes, and public deployment remain future work. No investment
+recommendation or claim of predictive ability is made.

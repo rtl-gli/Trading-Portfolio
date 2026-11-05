@@ -4,6 +4,13 @@ Notable project changes are recorded here.
 
 ## [Unreleased]
 
+- Reframed the project as Quant Models Explained and added the four-model app and package scaffolding.
+- Added exact runtime/development pins, pre-commit checks, secret scanning, and dependency auditing.
+- Added a validated SPY option-chain snapshot script with local, hash-documented output and overwrite protection.
+- Updated the configured 30-stock list to the new factor-regression research universe.
+
+## [Archived] - Portfolio Research Lab direction
+
 - Added a documented, fixed 30-stock universe across all 11 sectors and four ETFs.
 - Added validated daily adjusted-price ingestion with compressed local caching.
 - Added freshness and offline-cache reporting, data-quality diagnostics, and tests.

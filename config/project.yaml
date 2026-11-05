@@ -1,5 +1,5 @@
 project:
-  name: portfolio-research-lab
+  name: quant-models-explained
   classification: self-directed academic project
   reporting_currency: USD
   market_timezone: America/New_York
@@ -22,3 +22,7 @@ dashboard:
 
 paper_trading:
   initial_cash_usd: 10000
+
+research:
+  factor_portfolio_start_date: 2013-01-01
+  regime_start_date: 2000-01-01

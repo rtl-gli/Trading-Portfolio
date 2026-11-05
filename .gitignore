@@ -26,6 +26,7 @@ env/
 data/raw/
 data/cache/
 data/processed/
+data/options/snapshots/
 data/*.sqlite3
 data/*.db
 data/*.jsonl
@@ -36,5 +37,6 @@ logs/
 .ipynb_checkpoints/
 .vscode/
 .idea/
+*.egg-info/
 Thumbs.db
 Desktop.ini

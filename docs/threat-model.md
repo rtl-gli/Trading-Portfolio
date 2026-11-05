@@ -1,78 +1,82 @@
-# Threat model
+# Threat model: Quant Models Explained
 
-**Project classification:** self-directed academic research project. The app is
-not a broker, live-trading service, financial adviser, or regulated record
-system.
+**Classification:** self-directed academic research and education. The
+application is not a broker, investment adviser, live-trading service, or
+regulated financial system.
 
-## Scope and assets
+## Assets and scope
 
-This model covers the local Python package, Streamlit dashboard, configuration,
-downloaded adjusted-price cache, SQLite paper ledger, and JSON Lines audit log.
-Assets include source integrity, the user's private trade rationale, local
-research data, and the integrity of recorded signals and simulated trades.
+Assets include source code, environment configuration, downloaded factor and
+market data, daily SPY option-chain snapshots, derived results, and local
+research logs. The threat model covers local development, tests, and the
+Streamlit Community Cloud demo if it is later enabled.
 
-The application currently uses keyless `yfinance` access. It does not connect
-to brokerage accounts, execute real orders, or require API credentials.
+The initial yfinance workflows do not require credentials. No brokerage
+integration or real-money order path is in scope. `.env.example` is a
+credential-free template; `.env` and generated data must remain local.
 
 ## Trust boundaries
 
-- **External provider to application:** market data is downloaded from the
-  configured provider. Ticker/date inputs and returned data are checked, but
-  the project does not independently verify provider identity, point-in-time
-  coverage, or corporate-action correctness.
-- **Configuration and user inputs to calculation code:** YAML configuration
-  is parsed with `safe_load`; numerical settings, symbols, prices, signals,
-  weights, dates, and journal values are validated before use.
-- **Application to local files:** caches, the SQLite journal, and the audit log
-  are written beneath the project data directory. They are excluded from Git,
-  but are not encrypted.
-- **Dashboard to browser:** Streamlit is intended for local educational use.
-  The project does not implement user accounts, authorization, CSRF controls,
-  or a public deployment security boundary.
+- **Provider to loader:** yfinance and Kenneth French library data are external
+  and may be stale, revised, incomplete, malformed, or unavailable. Validate
+  schema, date alignment, units, missing-value sentinels, and numeric ranges.
+- **Config and user interface to model code:** YAML and slider inputs are
+  untrusted. Parse YAML safely, validate types and bounds, and reject
+  impossible values rather than silently substituting defaults.
+- **Application to local storage:** downloaded snapshots, caches, and logs
+  remain local and are excluded from Git. They are not encrypted.
+- **Application to public hosting:** Streamlit Community Cloud is not yet
+  configured. Before deployment, re-review privacy, secrets, resource limits,
+  dependency exposure, and public access.
 
-## Threats and controls
+## Threats and mitigations
 
-| Threat | Current control | Residual risk |
+| Threat | Mitigation | Residual risk |
 | --- | --- | --- |
-| Malformed or unexpected ticker and price data | Ticker allow-list pattern, strict dates, numeric/positive-price validation, explicit gap reporting, and fail-closed backtests | A valid-looking bad or revised observation from the provider can still affect results |
-| Malicious or malformed YAML | `yaml.safe_load` and explicit type/range checks | A user who edits the local configuration can still change research assumptions |
-| Look-ahead or execution-timing errors | Trailing signals, delayed fills, holdout evaluation, and tests that change future prices | A bug or misuse in future extensions may introduce leakage; review every new strategy |
-| Overstated performance | Costs/slippage, held-out evaluation, warnings, and explicitly labelled bias demonstrations | Survivorship bias, provider revisions, parameter search, and small samples remain |
-| SQL injection in the local journal | Parameterized SQLite statements and constrained inputs | Local users can edit the database directly; the simulator is not a secure shared service |
-| Audit-file modification | Each JSONL event is linked with a SHA-256 hash; appending verifies the existing chain | A local writer can delete the file or recompute hashes; there is no trusted remote copy or signature |
-| Secrets appearing in audit events | Secret-like field names are rejected; free-text rationale and review are not copied to the audit log | An existing local journal remains plaintext; protect the device and avoid storing personal data |
-| Accidental publication of local data | `.gitignore` excludes market caches, SQLite databases, JSONL logs, and secret files | Explicit force-adds, copies, or external backups can still disclose data |
-| Dependency or provider compromise | Dependencies and data provider are declared and documented | No lockfile, package signing policy, formal vendor review, or independent data verification |
+| Poisoned, malformed, or revised market/option data | Validate tickers, schema, dates, numeric fields, and hashes; retain source and retrieval metadata; fail explicitly | A valid-looking but incorrect provider quote can still distort results |
+| Factor-unit/date alignment error | Explicit percent-to-decimal conversion, sentinel handling, exact date joins, and published-series checks | Provider/library revisions and methodological differences can remain |
+| Secrets committed to public Git | `.env` and local secret files ignored; `detect-secrets` pre-commit scan; no current API keys | Scanner false negatives and deliberate force-adds remain possible |
+| Vulnerable or compromised dependency | Pinned direct requirements, CI `pip-audit`, and release-time audit | Pinned packages can still contain vulnerabilities; transitive dependencies also matter |
+| Model leakage or biased estimates | Causal/filtered probabilities for decisions, separate smoothed plots, simulation tests, and explicit model traps | Human-driven repeated tuning can still leak evaluation information |
+| Snapshot overwrite or silent data loss | Per-day output folder, atomic write, content hash, and fail-if-destination-exists behavior | Local files can still be deleted or modified by a user or process |
+| Raw market data exposed in public repository | Git ignores local snapshots and caches; review staged files before publish | Ignore rules do not prevent explicit force-add or copying data elsewhere |
+| Unsafe public app exposure | Deployment is not yet enabled; use Streamlit secrets only if credentials become necessary | A public demo has no custom authentication or authorization by default |
 
-## Audit semantics
+## Snapshot integrity and data policy
 
-Every dashboard evaluation logs a run header and one event per signal date,
-including its signal/target and the modeled position when available. Each
-paper-trade attempt and post-trade review is logged in the same transaction
-workflow as the local ledger update. Free-text rationale and review are kept in
-SQLite, not duplicated to the audit log; the audit stores their SHA-256 digest.
+Each successful option snapshot has a JSON manifest with retrieval time in
+UTC, New York snapshot date, expiration coverage, call/put counts, and SHA-256
+of the compressed CSV. This detects accidental file changes when checked
+against the manifest; it is not a digital signature or trusted timestamp.
+Anyone able to replace both files can recompute the hash.
 
-The JSONL chain is **tamper-evident, not tamper-proof**. It has no encryption,
-access control, trusted timestamp, digital signature, or remote immutability.
-Do not rely on it for legal, regulated, or financial dispute resolution.
+Snapshots are local and Git-ignored. yfinance data is for personal and
+educational use in this project; do not commit or publish raw option chains.
+The source may omit, delay, revise, or rate-limit quotes. The recorded
+retrieval time does not establish an exchange timestamp, complete NBBO, or
+tradability.
 
-## Safe operation
+The committed detect-secrets baseline contains only reviewed false positives:
+random notebook cell identifiers flagged as high-entropy hex strings and a
+test fixture that uses the literal key name `api_key` to verify rejection.
+The baseline does not store secret values. Re-scan and inspect every new
+finding instead of automatically baselining it.
 
-- Run the dashboard locally and do not expose it to an untrusted network.
-- Never add credentials or personally identifying information to source,
-  configuration, audit events, or trade rationale.
-- Keep local data, paper journals, and logs on a device protected by the
-  operating system's user-account controls.
-- Review `git status` and staged changes before publishing; `.gitignore` is
-  defense in depth, not a guarantee that private files cannot be committed.
-- Treat all returns as exploratory historical calculations, not expected or
-  live performance.
+## Safe operating rules
 
-## Out of scope and next review
+- Do not add credentials to source, YAML, notebooks, test fixtures, output,
+  logs, or commit messages.
+- Keep `.env`, downloaded snapshots, caches, and local results out of Git.
+- Review the exact staged file list before committing.
+- Do not treat factor alpha, regimes, option prices, or fitted Heston
+  parameters as forecasts or evidence of trading skill.
+- Before enabling public hosting or scheduled data collection, review the
+  provider's data-use terms and the new deployment/storage boundary.
 
-There is no real-money execution path, authentication, multi-user isolation,
-encrypted storage, remote audit service, or production deployment hardening.
-Before adding any broker integration, cloud deployment, credentials, or shared
-accounts, create a new threat model and have the design reviewed. Survivorship
-bias and market-data quality are research-validity risks as well as technical
-risks; they are not eliminated by the controls above.
+## Out of scope
+
+There is no real-money trading, brokerage connection, multi-user access
+control, encrypted local data store, signed audit service, or production
+availability guarantee. Add a new threat-model review before introducing
+credentials, public automated snapshots, cloud storage, broker APIs, or
+shared user accounts.
