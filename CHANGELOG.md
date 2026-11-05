@@ -12,6 +12,7 @@ Notable project changes are recorded here.
 - Added FF3/FF5 data parsing and caching, monthly portfolio returns, exact factor alignment, and Newey-West regression inference.
 - Added a beginner model guide with explicitly synthetic diagrams and plain-English coverage of all four planned models.
 - Added a Gaussian hidden-Markov regime experiment with chronological training/filtered probabilities, isolated smoothed probabilities, charts, tests, and a learning notebook.
+- Made guide charts render only for the selected model, cached repeated market-data loads and HMM fits, and added a clearly synthetic 3D volatility-surface teaching graph.
 
 ## [Archived] - Portfolio Research Lab direction
 

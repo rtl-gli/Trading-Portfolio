@@ -102,4 +102,5 @@ def test_model_guide_explains_all_four_models() -> None:
     assert not app.exception
     assert app.title[0].value == "A beginner's guide to the models"
     assert len(app.tabs) == 4
+    assert len(app.get("plotly_chart")) == 1
     assert any("synthetic" in item.value.lower() for item in app.markdown)

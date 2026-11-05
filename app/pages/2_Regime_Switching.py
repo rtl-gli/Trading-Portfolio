@@ -7,12 +7,44 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from portfolio_research.market_data import MarketDataError, load_prices
+from portfolio_research.market_data import (
+    MarketDataError,
+    MarketDataResult,
+    load_prices,
+)
 from quant_models.regimes.config import load_regime_settings
 from quant_models.regimes.gaussian_hmm import (
     RegimeModelError,
+    RegimeResult,
     fit_gaussian_regime_model,
 )
+
+
+@st.cache_data(ttl="1h", max_entries=8)
+def _load_prices_cached(
+    symbols: tuple[str, ...], start: date, end: date
+) -> MarketDataResult:
+    return load_prices(symbols, start, end)
+
+
+@st.cache_data(ttl="1h", max_entries=16)
+def _fit_regime_cached(
+    daily_log_returns: pd.Series,
+    n_states: int,
+    train_fraction: float,
+    n_restarts: int,
+    max_iterations: int,
+    random_seed: int,
+) -> RegimeResult:
+    return fit_gaussian_regime_model(
+        daily_log_returns,
+        n_states=n_states,
+        train_fraction=train_fraction,
+        n_restarts=n_restarts,
+        max_iterations=max_iterations,
+        random_seed=random_seed,
+    )
+
 
 st.title("Market regimes with a hidden Markov model")
 st.markdown(
@@ -95,20 +127,20 @@ with st.form("regime-model-inputs"):
 if submitted:
     try:
         with st.spinner("Loading adjusted prices and fitting training-sample HMMs..."):
-            market_data = load_prices(
-                [symbol],
+            market_data = _load_prices_cached(
+                (symbol,),
                 start_date,
                 today + timedelta(days=1),
             )
             adjusted_prices = market_data.prices[symbol].dropna()
             daily_log_returns = np.log(adjusted_prices).diff().dropna()
-            result = fit_gaussian_regime_model(
+            result = _fit_regime_cached(
                 daily_log_returns,
-                n_states=n_states,
-                train_fraction=train_fraction / 100.0,
-                n_restarts=n_restarts,
-                max_iterations=max_iterations,
-                random_seed=settings.random_seed,
+                n_states,
+                train_fraction / 100.0,
+                n_restarts,
+                max_iterations,
+                settings.random_seed,
             )
     except (
         MarketDataError,

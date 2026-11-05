@@ -6,7 +6,11 @@ import pandas as pd
 import streamlit as st
 
 from portfolio_research.config import load_universe
-from portfolio_research.market_data import MarketDataError, load_prices
+from portfolio_research.market_data import (
+    MarketDataError,
+    MarketDataResult,
+    load_prices,
+)
 from quant_models.factors.config import load_factor_settings
 from quant_models.factors.data import FactorDataError, load_fama_french_factors
 from quant_models.factors.portfolio import monthly_portfolio_returns
@@ -26,6 +30,14 @@ st.info(
     "specifications. Factor data comes from the official Ken French Data Library; "
     "adjusted stock prices come from the project's validated yfinance cache."
 )
+
+
+@st.cache_data(ttl="1h", max_entries=8)
+def _load_prices_cached(
+    symbols: tuple[str, ...], start: date, end: date
+) -> MarketDataResult:
+    return load_prices(symbols, start, end)
+
 
 try:
     settings = load_factor_settings()
@@ -120,8 +132,8 @@ if submitted:
             with st.spinner(
                 "Loading adjusted prices, validating factor data, and fitting models..."
             ):
-                market_data = load_prices(
-                    selected_symbols,
+                market_data = _load_prices_cached(
+                    tuple(selected_symbols),
                     price_start,
                     price_end,
                 )

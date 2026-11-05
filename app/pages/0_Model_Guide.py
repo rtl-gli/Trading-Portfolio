@@ -40,7 +40,8 @@ factor_tab, regime_tab, lsm_tab, heston_tab = st.tabs(
         "2. Regime switching",
         "3. Longstaff-Schwartz",
         "4. Heston",
-    ]
+    ],
+    on_change="rerun",
 )
 
 with factor_tab:
@@ -107,11 +108,12 @@ with factor_tab:
         height=330,
         template="plotly_white",
     )
-    st.plotly_chart(
-        fig,
-        width="stretch",
-        alt="Synthetic example showing market exposure as the largest return contribution",
-    )
+    if factor_tab.open:
+        st.plotly_chart(
+            fig,
+            width="stretch",
+            alt="Synthetic example showing market exposure as the largest return contribution",
+        )
 
 with regime_tab:
     st.header("Regime switching: allow the return pattern to change")
@@ -174,11 +176,12 @@ with regime_tab:
         height=330,
         template="plotly_white",
     )
-    st.plotly_chart(
-        figure,
-        width="stretch",
-        alt="Synthetic normal distributions illustrating a wider return spread in the higher-volatility state",
-    )
+    if regime_tab.open:
+        st.plotly_chart(
+            figure,
+            width="stretch",
+            alt="Synthetic normal distributions illustrating a wider return spread in the higher-volatility state",
+        )
 
 with lsm_tab:
     st.header(
@@ -249,11 +252,12 @@ with lsm_tab:
         height=330,
         template="plotly_white",
     )
-    st.plotly_chart(
-        figure,
-        width="stretch",
-        alt="Schematic American put exercise payoff and illustrative continuation value",
-    )
+    if lsm_tab.open:
+        st.plotly_chart(
+            figure,
+            width="stretch",
+            alt="Schematic American put exercise payoff and illustrative continuation value",
+        )
     st.caption(
         "The continuation curve above is deliberately illustrative; the project "
         "has not implemented or fitted Longstaff-Schwartz yet."
@@ -298,36 +302,101 @@ with heston_tab:
         ```
         """
     )
-    time = np.linspace(0.0, 5.0, 200)
-    initial_variance, long_run_variance, reversion_speed = 0.36, 0.16, 1.2
-    expected_variance = long_run_variance + (
-        initial_variance - long_run_variance
-    ) * np.exp(-reversion_speed * time)
-    figure = go.Figure(
-        go.Scatter(
-            x=time,
-            y=np.sqrt(expected_variance) * 100,
-            mode="lines",
-            name="Illustrative expected volatility",
-            line={"color": "#0f766e", "width": 3},
+    if heston_tab.open:
+        time = np.linspace(0.0, 5.0, 200)
+        initial_variance, long_run_variance, reversion_speed = 0.36, 0.16, 1.2
+        expected_variance = long_run_variance + (
+            initial_variance - long_run_variance
+        ) * np.exp(-reversion_speed * time)
+        figure = go.Figure(
+            go.Scatter(
+                x=time,
+                y=np.sqrt(expected_variance) * 100,
+                mode="lines",
+                name="Illustrative expected volatility",
+                line={"color": "#0f766e", "width": 3},
+            )
         )
-    )
-    figure.update_layout(
-        title="Mean-reversion intuition (illustrative parameter choices)",
-        xaxis_title="Time (years)",
-        yaxis_title="Expected volatility (%)",
-        height=330,
-        template="plotly_white",
-    )
-    st.plotly_chart(
-        figure,
-        width="stretch",
-        alt="Illustrative volatility curve returning from an elevated starting level toward a long-run level",
-    )
-    st.caption(
-        "This curve isolates deterministic mean reversion; it does not include "
-        "random variance shocks and is not a Heston price or calibration."
-    )
+        figure.update_layout(
+            title="Mean-reversion intuition (illustrative parameter choices)",
+            xaxis_title="Time (years)",
+            yaxis_title="Expected volatility (%)",
+            height=330,
+            template="plotly_white",
+        )
+        st.plotly_chart(
+            figure,
+            width="stretch",
+            alt="Illustrative volatility curve returning from an elevated starting level toward a long-run level",
+        )
+        st.caption(
+            "This curve isolates deterministic mean reversion; it does not include "
+            "random variance shocks and is not a Heston price or calibration."
+        )
+        st.markdown(
+            """
+            **3D surface intuition:** implied volatility is often visualized
+            across option strike (here represented by log-moneyness) and time
+            to maturity. A skew or smile shows how option prices vary across
+            strikes; curvature across maturity shows term structure.
+
+            The surface below is generated from a simple illustrative equation,
+            **not** from Heston pricing, market option quotes, or a calibration.
+            Heston implementation and calibration remain future work.
+
+            For this example, the plotted volatility is
+            $22\\%-12\\%k e^{-T/1.5}+18\\%k^2+2.5\\%e^{-T/0.75}$, where
+            $k=\\log(K/S)$ and $T$ is maturity in years. These coefficients
+            are invented to create a visible skew and maturity shape.
+            """
+        )
+        st.markdown("#### Synthetic 3D volatility surface")
+        log_moneyness = np.linspace(-0.4, 0.4, 25)
+        maturities = np.linspace(0.1, 2.0, 16)
+        moneyness_grid, maturity_grid = np.meshgrid(log_moneyness, maturities)
+        volatility_surface = 100 * (
+            0.22
+            - 0.12 * moneyness_grid * np.exp(-maturity_grid / 1.5)
+            + 0.18 * moneyness_grid**2
+            + 0.025 * np.exp(-maturity_grid / 0.75)
+        )
+        surface_figure = go.Figure(
+            go.Surface(
+                x=moneyness_grid,
+                y=maturity_grid,
+                z=volatility_surface,
+                colorscale="Viridis",
+                colorbar={"title": "Implied volatility (%)"},
+                hovertemplate=(
+                    "Log-moneyness: %{x:.2f}<br>"
+                    "Maturity: %{y:.2f} years<br>"
+                    "Illustrative volatility: %{z:.1f}%<extra></extra>"
+                ),
+            )
+        )
+        surface_figure.update_layout(
+            scene={
+                "xaxis_title": "log(K / S)",
+                "yaxis_title": "Maturity (years)",
+                "zaxis_title": "Implied volatility (%)",
+                "camera": {"eye": {"x": 1.5, "y": 1.7, "z": 1.25}},
+            },
+            height=560,
+            margin={"l": 15, "r": 15, "t": 10, "b": 40},
+            template="plotly_white",
+        )
+        st.plotly_chart(
+            surface_figure,
+            width="stretch",
+            alt=(
+                "Synthetic three-dimensional implied-volatility surface across "
+                "log-moneyness and maturity; not calculated from Heston"
+            ),
+        )
+        st.caption(
+            "Rotate the graph to compare the strike skew and maturity shape. "
+            "Every value is synthetic and included only to explain the chart form."
+        )
 
 st.divider()
 st.subheader("A quick comparison")
