@@ -21,8 +21,9 @@ Cox-Ross-Rubinstein reference pricers. Stage 3 adds the FF3/FF5 monthly
 regression, validated data alignment, and Newey-West inference. Stage 4 adds a
 beginner's guide to all four models, a Gaussian hidden-Markov regime
 experiment with chronological filtering, and an educational Heston
-walkthrough. Longstaff-Schwartz and Heston option pricing/calibration remain
-unimplemented.
+walkthrough. A researcher's notebook gives prompts for student-authored
+learning-log entries and dissertation planning. Longstaff-Schwartz and Heston
+option pricing/calibration remain unimplemented.
 
 | Module | Model | Validation and built-in limitation |
 | --- | --- | --- |
@@ -80,6 +81,10 @@ which use future observations. This is not a walk-forward trading strategy or
 a crash predictor. The factor page includes tested FF3/FF5 regression
 calculations. The options page includes Black-Scholes and binomial reference
 models, but not Longstaff-Schwartz yet; Heston calibration is also unfinished.
+The researcher's notebook offers an optional student-authored learning log,
+AI-use disclosure prompts, and a dissertation outline. Entries remain in the
+browser session until downloaded; they are not saved to the repository. See
+[`docs/student-research-notebook.md`](docs/student-research-notebook.md).
 The earlier
 portfolio-strategy code is retained under
 `src/portfolio_research/` and documented separately in

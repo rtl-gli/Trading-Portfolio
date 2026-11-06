@@ -130,3 +130,36 @@ def test_heston_page_teaches_equations_and_marks_surface_as_synthetic() -> None:
     assert any(
         "not guaranteed to be arbitrage-free" in item.value for item in app.caption
     )
+
+
+def test_research_notebook_loads_without_invented_personal_reflections() -> None:
+    app_path = (
+        Path(__file__).resolve().parents[1] / "app" / "pages" / "5_Research_Notebook.py"
+    )
+
+    app = AppTest.from_file(str(app_path)).run(timeout=30)
+
+    assert not app.exception
+    assert app.title[0].value == "My researcher's notebook"
+    markdown_text = " ".join(" ".join(item.value.split()) for item in app.markdown)
+    assert "does not write personal experiences" in markdown_text
+    assert any("AI assistance has been part" in item.value for item in app.markdown)
+    assert not app.get("download_button")
+
+
+def test_research_notebook_exports_only_user_entered_notes() -> None:
+    app_path = (
+        Path(__file__).resolve().parents[1] / "app" / "pages" / "5_Research_Notebook.py"
+    )
+
+    app = AppTest.from_file(str(app_path)).run(timeout=30)
+    app.text_area[0].set_value("Why does the binomial price approach Black-Scholes?")
+    app.text_area[-1].set_value("AI helped me draft test names; I checked the code.")
+    app.form_submit_button[0].click().run(timeout=30)
+
+    assert not app.exception
+    assert len(app.get("download_button")) == 1
+    export = app.session_state["research_notebook_export"]
+    assert "Why does the binomial price approach Black-Scholes?" in export
+    assert "AI helped me draft test names; I checked the code." in export
+    assert "What surprised me or changed my mind" not in export

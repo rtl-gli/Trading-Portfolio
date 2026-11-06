@@ -23,6 +23,9 @@ st.markdown(
     equations, assumptions, and illustrative graphs. Implemented calculations
     are separated clearly from teaching examples and unfinished model ideas.
 
+    The researcher's notebook offers dissertation planning and a learning log
+    for recording your own reasoning and what you can explain.
+
     This is an educational coding project, not a portfolio recommendation,
     investment service, or live trading system.
     """
