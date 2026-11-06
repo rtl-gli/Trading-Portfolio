@@ -93,6 +93,8 @@ def _forward_filter(
     variances: np.ndarray,
 ) -> np.ndarray:
     """Calculate P(state_t | observations through t), never using future rows."""
+    # Log probabilities avoid numerical underflow when many small probabilities
+    # are multiplied together. The log of zero is represented as negative infinity.
     log_start = _log_probabilities(start_probabilities)
     log_transition = _log_probabilities(transition_matrix)
     log_emissions = norm.logpdf(
@@ -105,6 +107,8 @@ def _forward_filter(
     filtered_log[0] = first - logsumexp(first)
 
     for row in range(1, len(observations)):
+        # Predict this day's state from yesterday's probabilities and the
+        # transition matrix, then update it using today's observed return.
         predicted = logsumexp(
             filtered_log[row - 1, :, None] + log_transition,
             axis=0,
@@ -182,6 +186,8 @@ def fit_gaussian_regime_model(
     if not np.isfinite(training).all() or np.var(training) <= 0.0:
         raise RegimeModelError("Training returns must have finite, non-zero variance.")
 
+    # HMM fitting can settle on different local solutions depending on its
+    # random starting point, so keep several fits and compare training scores.
     candidates: list[tuple[float, int, GaussianHMM, bool]] = []
     failures: list[str] = []
     restarts_with_likelihood_decreases = 0
@@ -219,6 +225,9 @@ def fit_gaussian_regime_model(
         best_model,
         selected_restart_had_likelihood_decrease,
     ) = max(candidates, key=lambda item: item[0])
+
+    # State numbers have no fixed meaning. Sort them by fitted variance so the
+    # labels are consistently ordered from lower to higher volatility.
     model_means = np.asarray(best_model.means_, dtype=float).reshape(-1)
     model_covariances = np.asarray(best_model.covars_, dtype=float)
     if model_covariances.ndim == 3:
@@ -249,6 +258,8 @@ def fit_gaussian_regime_model(
         model_means,
         model_variances,
     )[:, ordered_states]
+    # Smoothing deliberately uses the full series. It is useful for explaining
+    # historical states, but it contains future information and is not causal.
     smoothed = np.asarray(best_model.predict_proba(observations[:, None]))[
         :, ordered_states
     ]

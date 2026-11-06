@@ -114,9 +114,10 @@ def align_monthly_data(
             raise FactorDataError(f"Factor column {column!r} contains infinite values.")
         factors[column] = converted
 
-    common = portfolio.to_frame().join(factors, how="inner")
-    incomplete = common.loc[:, required].isna().any(axis=1)
-    aligned = common.loc[~incomplete].copy()
+    # An inner join keeps only calendar months present in both datasets.
+    overlapping_months = portfolio.to_frame().join(factors, how="inner")
+    incomplete_factor_rows = overlapping_months.loc[:, required].isna().any(axis=1)
+    aligned = overlapping_months.loc[~incomplete_factor_rows].copy()
     if aligned.empty:
         raise FactorDataError(
             "No complete overlapping monthly observations remain after date alignment."
@@ -124,8 +125,8 @@ def align_monthly_data(
     diagnostics = AlignmentDiagnostics(
         portfolio_months=len(portfolio),
         factor_months=len(factors),
-        overlapping_months=len(common),
-        incomplete_factor_months=int(incomplete.sum()),
+        overlapping_months=len(overlapping_months),
+        incomplete_factor_months=int(incomplete_factor_rows.sum()),
         portfolio_months_without_factors=len(portfolio.index.difference(factors.index)),
         factor_months_without_portfolio=len(factors.index.difference(portfolio.index)),
         used_months=len(aligned),
@@ -152,16 +153,24 @@ def run_factor_regression(
         raise ValueError("hac_lags must be an integer from 0 to observations - 1.")
 
     factor_columns = _MODEL_COLUMNS[model]
-    response = aligned["portfolio_return"] - aligned["RF"]
-    design = sm.add_constant(aligned.loc[:, factor_columns], has_constant="add")
-    if len(aligned) <= design.shape[1]:
+    # The regression explains return above the risk-free rate using the chosen
+    # factor returns. The constant term is the estimated alpha.
+    excess_returns = aligned["portfolio_return"] - aligned["RF"]
+    factor_returns = aligned.loc[:, factor_columns]
+    design_matrix = sm.add_constant(factor_returns, has_constant="add")
+    if len(aligned) <= design_matrix.shape[1]:
         raise FactorDataError(
             "Regression requires more observations than estimated parameters."
         )
-    if np.linalg.matrix_rank(design.to_numpy(dtype=float)) < design.shape[1]:
+    if (
+        np.linalg.matrix_rank(design_matrix.to_numpy(dtype=float))
+        < design_matrix.shape[1]
+    ):
         raise FactorDataError("Factor design matrix is rank deficient.")
 
-    fitted = sm.OLS(response, design, missing="raise").fit(
+    # HAC/Newey-West errors adjust uncertainty estimates for serial correlation
+    # and changing residual variance; they do not change the fitted coefficients.
+    fitted = sm.OLS(excess_returns, design_matrix, missing="raise").fit(
         cov_type="HAC",
         cov_kwds={"maxlags": hac_lags},
         use_t=True,

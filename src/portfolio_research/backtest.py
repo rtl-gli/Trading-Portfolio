@@ -95,6 +95,8 @@ def run_signal_backtest(
     if not available_signals.isin([0.0, 1.0]).all():
         raise ValueError("Long-only signals must be zero or one.")
 
+    # A signal is calculated at a close, so it cannot trade at that same close.
+    # Shift it at least one bar, plus any extra configured execution delay.
     positions = signals.shift(selected_settings.execution_delay_bars + 1).fillna(0.0)
     turnover = positions.diff().abs().fillna(0.0)
     turnover.iloc[-1] += abs(positions.iloc[-1])
@@ -143,6 +145,7 @@ def run_portfolio_backtest(
     if not available.any():
         raise ValueError("At least one portfolio target weight row is required.")
 
+    # Schedule target weights only after their signal date and configured delay.
     execution_delay = selected_settings.execution_delay_bars + 1
     target_events = available.shift(execution_delay, fill_value=False)
     scheduled_targets = targets.ffill().shift(execution_delay).fillna(0.0)
@@ -151,6 +154,7 @@ def run_portfolio_backtest(
     asset_returns.iloc[0] = 0.0
     gross_returns = pd.Series(0.0, index=validated_prices.index, name="gross_return")
     turnover = pd.Series(0.0, index=validated_prices.index, name="turnover")
+    # Between rebalances, each asset's portfolio weight drifts with its return.
     drifted_holdings = np.zeros(len(validated_prices.columns))
     for row_number, row_date in enumerate(validated_prices.index):
         daily_returns = asset_returns.loc[row_date].to_numpy(dtype=float)
@@ -162,6 +166,8 @@ def run_portfolio_backtest(
         positions.loc[row_date] = holdings
         portfolio_return = float(holdings @ daily_returns)
         gross_returns.loc[row_date] = portfolio_return
+        # Re-normalize asset values to obtain the next day's weights after
+        # today's portfolio return has changed the total portfolio value.
         end_of_day_value = holdings * (1 + daily_returns)
         drifted_holdings = end_of_day_value / (1 + portfolio_return)
     turnover.iloc[-1] += float(np.abs(drifted_holdings).sum())

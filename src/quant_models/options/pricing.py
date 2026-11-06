@@ -90,6 +90,7 @@ def black_scholes_price(
             return max(discounted_spot - discounted_strike, 0.0)
         return max(discounted_strike - discounted_spot, 0.0)
 
+    # d1 and d2 standardize the log-price move in the Black-Scholes formula.
     sigma_root_time = volatility * sqrt(time_to_expiry_years)
     d1 = (
         log(spot / strike)
@@ -151,6 +152,8 @@ def binomial_tree_price(
             "Inputs cause numerical overflow in the binomial tree."
         ) from error
 
+    # With no randomness, the option follows one known price path. Use the
+    # closed-form European price, or check every exercise date for an American.
     if volatility == 0 or up == down:
         if exercise_style == "european":
             return black_scholes_price(
@@ -172,16 +175,23 @@ def binomial_tree_price(
             )
         return max(exercise_values)
 
+    # Choose the up-move probability so the expected stock growth equals the
+    # risk-free growth under the risk-neutral pricing measure.
     probability_up = (growth - down) / (up - down)
     if not 0.0 <= probability_up <= 1.0:
         raise ValueError(
             "Inputs violate the binomial tree's risk-neutral no-arbitrage bounds."
         )
 
+    # First value every possible end-of-life node. Moving one step up multiplies
+    # the price by `up`; moving down multiplies it by `down`.
     up_moves = np.arange(steps + 1, dtype=float)
     terminal_prices = spot * np.exp(up_moves * log(up) + (steps - up_moves) * log(down))
     values = _payoff(terminal_prices, strike, option_type)
 
+    # Work backward through the tree: each node's value is the discounted
+    # risk-neutral average of its two children. American options also compare
+    # that continuation value with exercising immediately.
     for step in range(steps - 1, -1, -1):
         values = discount * (
             probability_up * values[1:] + (1.0 - probability_up) * values[:-1]

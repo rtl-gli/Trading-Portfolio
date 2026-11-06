@@ -85,6 +85,8 @@ The researcher's notebook offers an optional student-authored learning log,
 AI-use disclosure prompts, and a dissertation outline. Entries remain in the
 browser session until downloaded; they are not saved to the repository. See
 [`docs/student-research-notebook.md`](docs/student-research-notebook.md).
+For a beginner-friendly map through the Python modules, see the
+[`code tour`](docs/code-tour.md).
 The earlier
 portfolio-strategy code is retained under
 `src/portfolio_research/` and documented separately in

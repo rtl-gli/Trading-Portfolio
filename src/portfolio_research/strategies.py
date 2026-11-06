@@ -62,15 +62,15 @@ def momentum_signals(
     trailing_return = validated.pct_change(lookback_sessions, fill_method=None)
     signals = pd.Series(np.nan, index=validated.index, name="momentum_signal")
     in_market = False
-    for index in range(len(validated)):
-        value = trailing_return.iloc[index]
+    for row_number in range(len(validated)):
+        value = trailing_return.iloc[row_number]
         if pd.isna(value):
             continue
         if not in_market and value > entry_return_threshold:
             in_market = True
         elif in_market and value < exit_return_threshold:
             in_market = False
-        signals.iloc[index] = float(in_market)
+        signals.iloc[row_number] = float(in_market)
     return signals
 
 
@@ -104,15 +104,15 @@ def mean_reversion_signals(
     z_score = (validated - rolling_mean) / rolling_std.where(rolling_std > 0)
     signals = pd.Series(np.nan, index=validated.index, name="mean_reversion_signal")
     in_market = False
-    for index in range(len(validated)):
-        value = z_score.iloc[index]
+    for row_number in range(len(validated)):
+        value = z_score.iloc[row_number]
         if pd.isna(value):
             continue
         if not in_market and value <= -entry_z_score:
             in_market = True
         elif in_market and value >= -exit_z_score:
             in_market = False
-        signals.iloc[index] = float(in_market)
+        signals.iloc[row_number] = float(in_market)
     return signals
 
 
@@ -129,9 +129,12 @@ def _solve_long_only_weights(
         )
 
     def objective(weights: np.ndarray) -> float:
+        # Markowitz trades off risk against estimated return:
+        # variance penalty minus expected return. The optimizer minimizes this.
+        portfolio_variance = weights @ covariance @ weights
+        expected_portfolio_return = expected_returns @ weights
         return float(
-            0.5 * risk_aversion * weights @ covariance @ weights
-            - expected_returns @ weights
+            0.5 * risk_aversion * portfolio_variance - expected_portfolio_return
         )
 
     result = minimize(
@@ -144,6 +147,7 @@ def _solve_long_only_weights(
     )
     if not result.success:
         raise RuntimeError(f"Markowitz optimisation failed: {result.message}")
+    # Remove tiny numerical bound violations, then restore a total weight of 1.
     weights = np.clip(result.x, 0.0, maximum_weight)
     weights /= weights.sum()
     return weights
@@ -226,8 +230,10 @@ def rolling_markowitz_weights(
 
     daily_returns = validated.pct_change(fill_method=None)
     weights = pd.DataFrame(np.nan, index=validated.index, columns=validated.columns)
+    # Each estimate sees only returns dated on or before its rebalance date.
     for position in range(lookback, len(validated), rebalance):
-        training_returns = daily_returns.iloc[position - lookback + 1 : position + 1]
+        first_training_row = position - lookback + 1
+        training_returns = daily_returns.iloc[first_training_row : position + 1]
         expected_returns = training_returns.mean().to_numpy() * 252
         covariance = training_returns.cov().to_numpy() * 252
         covariance = (covariance + covariance.T) / 2

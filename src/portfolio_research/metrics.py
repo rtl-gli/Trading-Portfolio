@@ -68,16 +68,20 @@ def calculate_metrics(
             "At least two return dates spanning positive time are required."
         )
 
-    wealth = (1 + strategy).cumprod()
+    # Turning returns into a wealth index makes drawdowns and total growth easy
+    # to read: 1.0 is the starting value, 1.10 means a 10% gain.
+    wealth_index = (1 + strategy).cumprod()
     years = elapsed_days / 365.25
-    final_wealth = float(wealth.iloc[-1])
+    final_wealth = float(wealth_index.iloc[-1])
     cagr = final_wealth ** (1 / years) - 1 if final_wealth > 0 else -1.0
-    running_peak = wealth.cummax().clip(lower=1.0)
-    drawdown = wealth / running_peak - 1
+    running_peak = wealth_index.cummax().clip(lower=1.0)
+    drawdown = wealth_index / running_peak - 1
     max_drawdown = float(drawdown.min())
     annualized_volatility = float(
         strategy.std(ddof=1) * math.sqrt(selected_settings.periods_per_year)
     )
+    # Convert the annual risk-free rate into an equivalent daily rate before
+    # subtracting it from each strategy return.
     daily_risk_free = (1 + selected_settings.annual_risk_free_rate) ** (
         1 / selected_settings.periods_per_year
     ) - 1
@@ -96,6 +100,8 @@ def calculate_metrics(
             * math.sqrt(selected_settings.periods_per_year)
         )
 
+    # This project reports signed historical VaR: a negative estimate means
+    # the selected tail quantile was actually a gain in this sample.
     historical_var = float(
         -strategy.quantile(1 - selected_settings.var_confidence, interpolation="linear")
     )
